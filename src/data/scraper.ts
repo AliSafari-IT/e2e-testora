@@ -95,7 +95,8 @@ export const scraperSitesSuite: TestSuiteDefinition = {
   suiteId: "scraper-sites",
   frId: "listing-scraping",
   title: "Supported listing sites",
-  description: "Per-site scraping routing and live-scrape smoke coverage via the scraper API.",
+  description:
+    "Per-site scraping routing and live-scrape smoke coverage via the scraper API.",
 };
 
 export const scraperRoutingFixture: TestFixtureDefinition = {
@@ -121,7 +122,10 @@ export const scraperLiveFixture: TestFixtureDefinition = {
 // extractor, it does not fetch the page. Expected sources are the values
 // ImmoStory's getSiteCategory() returns for each host.
 const ROUTING_SITES: { url: string; expectedSource: string }[] = [
-  { url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/x/1000/1", expectedSource: "immoweb" },
+  {
+    url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/x/1000/1",
+    expectedSource: "immoweb",
+  },
   { url: "https://www.zimmo.be/nl/x/te-koop/x/L1/", expectedSource: "zimmo" },
   { url: "https://www.immoscoop.be/te-koop/x/1", expectedSource: "immoscoop" },
   { url: "https://www.realo.be/nl/x/1", expectedSource: "realo" },
@@ -147,7 +151,8 @@ export const scraperTestCases: TestCaseDefinition[] = [
   {
     caseId: "scraper-routing-per-site",
     fixtureId: "scraper-routing",
-    title: "simulate routes each supported site to its own extractor + strategy",
+    title:
+      "simulate routes each supported site to its own extractor + strategy",
     scriptType: "scripted",
     runs: ROUTING_SITES,
     expected: {},
@@ -159,8 +164,24 @@ export const scraperTestCases: TestCaseDefinition[] = [
     title: "a real scrape returns a usable listing (title + images)",
     scriptType: "scripted",
     runs: [
-      { url: "https://www.zimmo.be/nl/meise-1860/te-koop/bedrijfsvastgoed/L36KT/" },
-      { url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774" },
+      {
+        url: "https://www.zimmo.be/nl/meise-1860/te-koop/bedrijfsvastgoed/L36KT/",
+      },
+      {
+        url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774",
+      },
+      {
+        url: "https://www.funda.nl/detail/koop/den-helder/huisjan-verfailleweg-15/80849612/",
+      },
+      {
+        url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe37748",
+      },
+      {
+        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/1156943",
+      },
+      {
+        url: "https://www.booking.com/Share-aPkX8K0",
+      },
     ],
     expected: {},
     script: LIVE_SCRIPT,

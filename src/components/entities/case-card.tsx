@@ -4,9 +4,17 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { CaseForm } from "@/components/forms/case-form";
 import { DeleteButton } from "@/components/delete-button";
-import { Pencil, X, Copy, Check } from "lucide-react";
+import { Pencil, X, Copy, Check, Code2 } from "lucide-react";
 
 type ScriptType = "single" | "multi" | "scripted";
 
@@ -29,10 +37,14 @@ export function CaseCard({ testCase, fixtureTitle, fixtureOptions }: CaseCardPro
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const scriptText =
-    testCase.scriptType === "scripted"
-      ? testCase.script ?? ""
-      : JSON.stringify(testCase.scriptType === "multi" ? testCase.runs : testCase.input, null, 2);
+  const isScripted = testCase.scriptType === "scripted";
+  const scriptText = isScripted
+    ? testCase.script ?? ""
+    : JSON.stringify(testCase.scriptType === "multi" ? testCase.runs : testCase.input, null, 2);
+  // What the "view" button reveals: a TestCafe script for scripted cases, the
+  // data rows/object that drive the generic runner otherwise.
+  const scriptLabel = isScripted ? "script" : "data";
+  const lineCount = scriptText ? scriptText.split("\n").length : 0;
 
   async function handleCopy() {
     await navigator.clipboard.writeText(scriptText);
@@ -57,7 +69,7 @@ export function CaseCard({ testCase, fixtureTitle, fixtureOptions }: CaseCardPro
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <CardTitle>{testCase.title}</CardTitle>
           <Badge variant={testCase.scriptType === "single" ? "outline" : "default"}>{testCase.scriptType}</Badge>
         </div>
@@ -66,17 +78,36 @@ export function CaseCard({ testCase, fixtureTitle, fixtureOptions }: CaseCardPro
           {fixtureTitle ? ` · ${fixtureTitle}` : ""}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <div className="flex justify-end">
-            <Button size="sm" variant="secondary" className="h-7 px-2" onClick={handleCopy}>
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
-          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{scriptText}</pre>
-        </div>
-        <div className="flex gap-2">
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" disabled={!scriptText}>
+                <Code2 className="h-4 w-4" />
+                View {scriptLabel}
+                {lineCount > 0 && (
+                  <span className="text-xs text-muted-foreground">({lineCount} lines)</span>
+                )}
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{testCase.title}</DialogTitle>
+                <DialogDescription>
+                  {testCase.caseId} · {testCase.scriptType} {scriptLabel}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" className="h-7 px-2" onClick={handleCopy}>
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+                {scriptText || "(empty)"}
+              </pre>
+            </DialogContent>
+          </Dialog>
           <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
             <Pencil className="h-4 w-4" />
             Edit

@@ -99,10 +99,11 @@ const GENERATE_FROM_URL_SCRIPT = [
   "  // Poll for the wizard up to a per-attempt budget. NB: a bare",
   "  // `await selector.exists` returns an immediate snapshot — it does NOT wait",
   "  // — so we poll explicitly rather than rely on a selector timeout here. The",
-  "  // first attempt also pays for Next.js dev JIT-compiling /listings +",
+  "  // budget covers the slowest supported sources (booking.com ~90s, funda",
+  "  // ~45s) and, on the first attempt, Next.js dev JIT-compiling /listings +",
   "  // /jobs/[id] on a cold start; later attempts run warm. A miss means the",
   "  // scrape flaked for this source, so the outer loop retries Start.",
-  "  const deadline = Date.now() + (attempt === 0 ? 150000 : 90000);",
+  "  const deadline = Date.now() + (attempt === 0 ? 210000 : 150000);",
   "  while (Date.now() < deadline) {",
   "    if (await orientationSection.exists) { reachedWizard = true; break; }",
   "    await t.wait(2000);",
@@ -138,7 +139,8 @@ export const createVideoFromUrlSuite: TestSuiteDefinition = {
   suiteId: "create-video-from-url",
   frId: "video-generation-flow",
   title: "Create Video From Listing URL",
-  description: "End-to-end happy path from pasting a listing URL to kicking off rendering.",
+  description:
+    "End-to-end happy path from pasting a listing URL to kicking off rendering.",
 };
 
 export const listingsWizardFixture: TestFixtureDefinition = {
@@ -159,8 +161,24 @@ export const videoGenerationTestCases: TestCaseDefinition[] = [
     // Two representative sources that both scrape reliably on localhost: a
     // Belgian portal (zimmo) and the DataDome-protected market leader (immoweb).
     runs: [
-      { url: "https://www.zimmo.be/nl/meise-1860/te-koop/bedrijfsvastgoed/L36KT/" },
-      { url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774" },
+      {
+        url: "https://www.zimmo.be/nl/hasselt-3500/te-huur/appartement/LPJ5A/",
+      },
+      {
+        url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774",
+      },
+      {
+        url: "https://www.funda.nl/detail/koop/den-helder/huisjan-verfailleweg-15/80849612/",
+      },
+      {
+        url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe37748",
+      },
+      {
+        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/1156943",
+      },
+      {
+        url: "https://www.booking.com/Share-aPkX8K0"
+      }
     ],
     expected: {},
     script: GENERATE_FROM_URL_SCRIPT,
