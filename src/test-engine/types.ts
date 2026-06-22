@@ -1,0 +1,55 @@
+export interface FunctionalRequirementDefinition {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface TestSuiteDefinition {
+  suiteId: string;
+  frId: string;
+  title: string;
+  description: string;
+}
+
+export interface TestFixtureDefinition {
+  fixtureId: string;
+  suiteId: string;
+  title: string;
+  baseUrl?: string;
+  commonInput: Record<string, unknown>;
+  setupScript?: string;
+  teardownScript?: string;
+}
+
+export type ScriptType = "single" | "multi";
+
+export interface TestCaseDefinition {
+  caseId: string;
+  fixtureId: string;
+  title: string;
+  scriptType: ScriptType;
+  input?: Record<string, unknown>;
+  runs?: Record<string, unknown>[];
+  expected: Record<string, unknown>;
+}
+
+export type TestStatus = "pending" | "running" | "passed" | "failed" | "error";
+
+export interface TestRunResult {
+  id: string;
+  caseId: string;
+  status: TestStatus;
+  runIndex: number | null;
+  durationMs: number | null;
+  details: Record<string, unknown>;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface FormattedReport {
+  suite: string;
+  fixture: string;
+  case: string;
+  status: TestStatus;
+  details: Record<string, unknown>;
+}

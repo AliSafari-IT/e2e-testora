@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: e2e-testora-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: e2e_testora
+      POSTGRES_PASSWORD: e2e_testora
+      POSTGRES_DB: e2e-testing-db
+    ports:
+      - "55433:5432"
+    volumes:
+      - e2e_testora_pgdata:/var/lib/postgresql/data
+
+volumes:
+  e2e_testora_pgdata:
