@@ -9,7 +9,7 @@ import { Plus, Save } from "lucide-react";
 
 interface RequirementFormProps {
   mode?: "create" | "edit";
-  initial?: { id: string; title: string; description: string };
+  initial?: { id: string; title: string; description: string; baseUrl?: string | null };
   onSuccess?: () => void;
 }
 
@@ -18,6 +18,7 @@ export function RequirementForm({ mode = "create", initial, onSuccess }: Require
   const [id, setId] = useState(initial?.id ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +30,9 @@ export function RequirementForm({ mode = "create", initial, onSuccess }: Require
       const res = await fetch(mode === "edit" ? `/api/requirements/${initial?.id}` : "/api/requirements", {
         method: mode === "edit" ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(mode === "edit" ? { title, description } : { id, title, description }),
+        body: JSON.stringify(
+          mode === "edit" ? { title, description, baseUrl } : { id, title, description, baseUrl },
+        ),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -40,6 +43,7 @@ export function RequirementForm({ mode = "create", initial, onSuccess }: Require
         setId("");
         setTitle("");
         setDescription("");
+        setBaseUrl("");
       }
       onSuccess?.();
       router.refresh();
@@ -76,6 +80,17 @@ export function RequirementForm({ mode = "create", initial, onSuccess }: Require
           placeholder="Covers all login and signup flows."
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="fr-base-url">
+          Base URL (optional — environment root shared by every suite/fixture under this requirement)
+        </Label>
+        <Input
+          id="fr-base-url"
+          placeholder="http://localhost:3233 or https://immostory.ai"
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}

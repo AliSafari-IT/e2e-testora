@@ -2,6 +2,9 @@ export interface FunctionalRequirementDefinition {
   id: string;
   title: string;
   description: string;
+  // Environment root shared by every fixture under this FR's suites (e.g.
+  // http://localhost:3233 or https://immostory.ai). See resolveFixtureBaseUrl().
+  baseUrl?: string;
 }
 
 export interface TestSuiteDefinition {

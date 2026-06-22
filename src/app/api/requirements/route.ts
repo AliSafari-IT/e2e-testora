@@ -7,6 +7,7 @@ const createSchema = z.object({
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),
   title: z.string().min(1),
   description: z.string().default(""),
+  baseUrl: z.string().url().optional().or(z.literal("")),
 });
 
 export async function POST(request: Request) {
@@ -16,8 +17,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const { baseUrl, ...rest } = parsed.data;
+
   try {
-    const [fr] = await db.insert(functionalRequirements).values(parsed.data).returning();
+    const [fr] = await db
+      .insert(functionalRequirements)
+      .values({ ...rest, baseUrl: baseUrl || null })
+      .returning();
     return NextResponse.json({ functionalRequirement: fr }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

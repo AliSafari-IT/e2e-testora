@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, Copy, Loader2, PlayCircle, Terminal } from "lucide-react";
+import { useRun } from "@/components/run-provider";
 
 interface FixtureSummary {
   fixtureId: string;
@@ -13,95 +14,37 @@ interface FixtureSummary {
   caseCount: number;
 }
 
-interface ReportEntry {
-  suite: string;
-  fixture: string;
-  case: string;
-  status: string;
-  details: Record<string, unknown>;
-}
-
 export function RunPanel() {
   const searchParams = useSearchParams();
+  // Run state lives in RunProvider (mounted in the layout) so it survives
+  // navigating to other routes while a run is in progress.
+  const { selectedFixtureId, setSelectedFixtureId, running, logs, reports, error, startRun } =
+    useRun();
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
-  const [selectedFixtureId, setSelectedFixtureId] = useState<string>(
-    searchParams.get("fixtureId") ?? "",
-  );
-  const [running, setRunning] = useState(false);
-  const [reports, setReports] = useState<ReportEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     fetch("/api/fixtures")
       .then((res) => res.json())
       .then((data: FixtureSummary[]) => {
         setFixtures(data);
-        if (!selectedFixtureId && data[0]) {
-          setSelectedFixtureId(data[0].fixtureId);
+        if (!selectedFixtureId) {
+          setSelectedFixtureId(searchParams.get("fixtureId") ?? data[0]?.fixtureId ?? "");
         }
       });
-  }, [selectedFixtureId]);
+    // Only needs to run once on mount to populate the dropdown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [logs]);
 
-  useEffect(() => {
-    return () => eventSourceRef.current?.close();
-  }, []);
-
   async function copyLogs() {
     await navigator.clipboard.writeText(logs.join("\n"));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
-  }
-
-  async function runFixture() {
-    if (!selectedFixtureId) return;
-    setRunning(true);
-    setError(null);
-    setReports(null);
-    setLogs([]);
-    eventSourceRef.current?.close();
-
-    try {
-      const res = await fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fixtureId: selectedFixtureId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
-        setRunning(false);
-        return;
-      }
-
-      const eventSource = new EventSource(`/api/run/stream/${data.runId}`);
-      eventSourceRef.current = eventSource;
-
-      eventSource.addEventListener("log", (event) => {
-        setLogs((prev) => [...prev, JSON.parse(event.data)]);
-      });
-      eventSource.addEventListener("done", (event) => {
-        setReports(JSON.parse(event.data));
-        setRunning(false);
-        eventSource.close();
-      });
-      eventSource.addEventListener("error", (event) => {
-        const messageEvent = event as MessageEvent<string>;
-        setError(messageEvent.data ? JSON.parse(messageEvent.data) : "Run failed");
-        setRunning(false);
-        eventSource.close();
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Run failed");
-      setRunning(false);
-    }
   }
 
   return (
@@ -116,6 +59,7 @@ export function RunPanel() {
             className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
             value={selectedFixtureId}
             onChange={(event) => setSelectedFixtureId(event.target.value)}
+            disabled={running}
           >
             {fixtures.length === 0 && <option value="">No fixtures available</option>}
             {fixtures.map((fixture) => (
@@ -124,10 +68,15 @@ export function RunPanel() {
               </option>
             ))}
           </select>
-          <Button onClick={runFixture} disabled={running || !selectedFixtureId}>
+          <Button onClick={() => startRun(selectedFixtureId)} disabled={running || !selectedFixtureId}>
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
             {running ? "Running..." : "Run fixture"}
           </Button>
+          {running && (
+            <span className="text-xs text-muted-foreground">
+              The run keeps streaming if you switch pages.
+            </span>
+          )}
         </CardContent>
       </Card>
 

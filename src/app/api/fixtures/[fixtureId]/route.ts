@@ -3,10 +3,15 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { testFixtures } from "@/db/schema";
+import { isValidFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
 
 const updateSchema = z.object({
   title: z.string().min(1).optional(),
-  baseUrl: z.string().url().optional().or(z.literal("")),
+  baseUrl: z
+    .string()
+    .refine(isValidFixtureBaseUrl, { message: "baseUrl must be an absolute URL or a path starting with /" })
+    .optional()
+    .or(z.literal("")),
   commonInput: z.record(z.unknown()).optional(),
   suiteId: z.string().min(1).optional(),
   setupScript: z.string().optional(),

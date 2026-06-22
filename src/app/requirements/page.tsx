@@ -29,7 +29,7 @@ export default async function RequirementsPage() {
         {requirements.map((fr) => (
           <RequirementCard
             key={fr.id}
-            fr={{ id: fr.id, title: fr.title, description: fr.description, suiteCount: fr.suites.length }}
+            fr={{ id: fr.id, title: fr.title, description: fr.description, suiteCount: fr.suites.length, baseUrl: fr.baseUrl }}
           />
         ))}
         {requirements.length === 0 && (

@@ -10,7 +10,7 @@ import { DeleteButton } from "@/components/delete-button";
 import { Pencil, X } from "lucide-react";
 
 interface RequirementCardProps {
-  fr: { id: string; title: string; description: string; suiteCount: number };
+  fr: { id: string; title: string; description: string; suiteCount: number; baseUrl?: string | null };
 }
 
 export function RequirementCard({ fr }: RequirementCardProps) {
@@ -43,18 +43,25 @@ export function RequirementCard({ fr }: RequirementCardProps) {
           <CardDescription>{fr.description}</CardDescription>
         </Link>
       </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <code className="text-xs text-muted-foreground">{fr.id}</code>
-        <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Button>
-          <DeleteButton
-            url={`/api/requirements/${fr.id}`}
-            confirmText={`Delete requirement "${fr.title}"? This also deletes its suites, fixtures and cases.`}
-          />
+      <CardContent className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <code className="text-xs text-muted-foreground">{fr.id}</code>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              <Pencil className="h-4 w-4" />
+              Edit
+            </Button>
+            <DeleteButton
+              url={`/api/requirements/${fr.id}`}
+              confirmText={`Delete requirement "${fr.title}"? This also deletes its suites, fixtures and cases.`}
+            />
+          </div>
         </div>
+        {fr.baseUrl && (
+          <p className="text-xs text-muted-foreground">
+            Base URL: <code>{fr.baseUrl}</code>
+          </p>
+        )}
       </CardContent>
     </Card>
   );

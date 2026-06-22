@@ -115,10 +115,13 @@ export function FixtureForm({ mode = "create", initial, defaultSuiteId, suiteOpt
         </select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="fixture-baseurl">Base URL (optional)</Label>
+        <Label htmlFor="fixture-baseurl">
+          Base URL (optional — a full URL overrides the requirement's base URL entirely; a path
+          like <code>/en/login</code> is appended to it)
+        </Label>
         <Input
           id="fixture-baseurl"
-          placeholder="https://example-app.local/login"
+          placeholder="https://example-app.local/login or /en/login"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
         />

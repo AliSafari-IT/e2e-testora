@@ -30,7 +30,12 @@ export async function runScenario(t, data, expected) {
     const value = typeof rawValue === "string" ? resolveValue(rawValue) : rawValue;
     const input = Selector(`[name="${field}"], #${field}`);
     if (await input.exists) {
-      await t.typeText(input, String(value), { replace: true });
+      const stringValue = String(value);
+      if (stringValue) {
+        await t.typeText(input, stringValue, { replace: true });
+      } else {
+        await t.selectText(input).pressKey("delete");
+      }
     }
   }
 

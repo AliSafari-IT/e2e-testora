@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CaseForm } from "@/components/forms/case-form";
 import { DeleteButton } from "@/components/delete-button";
-import { Pencil, X } from "lucide-react";
+import { Pencil, X, Copy, Check } from "lucide-react";
 
 type ScriptType = "single" | "multi" | "scripted";
 
@@ -27,6 +27,18 @@ interface CaseCardProps {
 
 export function CaseCard({ testCase, fixtureTitle, fixtureOptions }: CaseCardProps) {
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const scriptText =
+    testCase.scriptType === "scripted"
+      ? testCase.script ?? ""
+      : JSON.stringify(testCase.scriptType === "multi" ? testCase.runs : testCase.input, null, 2);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(scriptText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
 
   if (editing) {
     return (
@@ -55,11 +67,15 @@ export function CaseCard({ testCase, fixtureTitle, fixtureOptions }: CaseCardPro
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-          {testCase.scriptType === "scripted"
-            ? testCase.script
-            : JSON.stringify(testCase.scriptType === "multi" ? testCase.runs : testCase.input, null, 2)}
-        </pre>
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-end">
+            <Button size="sm" variant="secondary" className="h-7 px-2" onClick={handleCopy}>
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">{scriptText}</pre>
+        </div>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
             <Pencil className="h-4 w-4" />

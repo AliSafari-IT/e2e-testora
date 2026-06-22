@@ -10,8 +10,10 @@ import {
   PlayCircle,
   FileBarChart,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRun } from "@/components/run-provider";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -25,6 +27,7 @@ const navItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const { running } = useRun();
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card/40 p-4">
@@ -36,6 +39,7 @@ export function SidebarNav() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
+          const showRunning = running && item.href === "/run";
           return (
             <Link
               key={item.href}
@@ -47,6 +51,12 @@ export function SidebarNav() {
             >
               <Icon className="h-4 w-4" />
               {item.label}
+              {showRunning && (
+                <span className="ml-auto flex items-center gap-1 text-xs text-accent">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  running
+                </span>
+              )}
             </Link>
           );
         })}

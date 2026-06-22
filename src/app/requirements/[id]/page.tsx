@@ -27,7 +27,7 @@ export default async function RequirementDetailPage({ params }: { params: Promis
       </div>
 
       <RequirementCard
-        fr={{ id: fr.id, title: fr.title, description: fr.description, suiteCount: fr.suites.length }}
+        fr={{ id: fr.id, title: fr.title, description: fr.description, suiteCount: fr.suites.length, baseUrl: fr.baseUrl }}
       />
 
       <Card>

@@ -15,6 +15,13 @@
       "when": 1782128359364,
       "tag": "0001_fair_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782137491119,
+      "tag": "0002_adorable_black_queen",
+      "breakpoints": true
     }
   ]
 }

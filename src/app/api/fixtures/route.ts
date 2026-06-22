@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getTestFixtures } from "@/lib/queries";
 import { db } from "@/db/client";
 import { testFixtures } from "@/db/schema";
+import { isValidFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
 
 export async function GET() {
   const fixtures = await getTestFixtures();
@@ -19,7 +20,11 @@ const createSchema = z.object({
   fixtureId: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),
   suiteId: z.string().min(1),
   title: z.string().min(1),
-  baseUrl: z.string().url().optional().or(z.literal("")),
+  baseUrl: z
+    .string()
+    .refine(isValidFixtureBaseUrl, { message: "baseUrl must be an absolute URL or a path starting with /" })
+    .optional()
+    .or(z.literal("")),
   commonInput: z.record(z.unknown()).default({}),
 });
 

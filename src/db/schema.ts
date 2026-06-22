@@ -22,6 +22,11 @@ export const functionalRequirements = pgTable("functional_requirements", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
+  // Environment root shared by every suite/fixture/case under this FR (e.g.
+  // http://localhost:3233 or https://immostory.ai). Fixtures may inherit it
+  // as-is, extend it with a relative path, or override it entirely with
+  // their own absolute baseUrl — see resolveFixtureBaseUrl().
+  baseUrl: text("base_url"),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

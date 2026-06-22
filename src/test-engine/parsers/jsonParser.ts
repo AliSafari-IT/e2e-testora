@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
 import type {
   FunctionalRequirementDefinition,
   TestSuiteDefinition,
@@ -10,6 +11,7 @@ const frSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   description: z.string().default(""),
+  baseUrl: z.string().url().optional(),
 });
 
 const suiteSchema = z.object({
@@ -23,7 +25,12 @@ const fixtureSchema = z.object({
   fixtureId: z.string().min(1),
   suiteId: z.string().min(1),
   title: z.string().min(1),
-  baseUrl: z.string().url().optional(),
+  // Absolute (full override) or a relative path resolved against the
+  // parent functional requirement's baseUrl — see resolveFixtureBaseUrl().
+  baseUrl: z
+    .string()
+    .refine(isValidFixtureBaseUrl, { message: "baseUrl must be an absolute URL or a path starting with /" })
+    .optional(),
   commonInput: z.record(z.unknown()).default({}),
   setupScript: z.string().optional(),
   teardownScript: z.string().optional(),

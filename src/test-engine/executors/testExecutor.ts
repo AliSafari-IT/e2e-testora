@@ -8,6 +8,7 @@ import { db } from "@/db/client";
 import { testCases, testFixtures, testResults } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateTestSpec } from "@/test-engine/generators/testGenerator";
+import { resolveFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
 import type { TestCaseDefinition, TestFixtureDefinition, TestRunResult } from "@/test-engine/types";
 
 export interface ExecuteFixtureOptions {
@@ -52,7 +53,14 @@ export async function executeFixture(
       .src(specPath)
       .browsers(browser)
       .reporter("spec", logStream)
-      .run();
+      .run({
+        // Local dev environments (Next.js JIT-compiling routes on first
+        // request) can be much slower than production — give navigation
+        // and in-page AJAX calls a generous ceiling on top of any explicit
+        // per-selector timeouts in the test scripts themselves.
+        pageLoadTimeout: 60000,
+        ajaxRequestTimeout: 60000,
+      });
 
     const status = failedCount === 0 ? "passed" : "failed";
     for (const testCase of cases) {
@@ -107,6 +115,7 @@ export async function loadFixtureWithCases(
 ): Promise<{ fixture: TestFixtureDefinition; cases: TestCaseDefinition[] } | null> {
   const fixtureRow = await db.query.testFixtures.findFirst({
     where: eq(testFixtures.fixtureId, fixtureId),
+    with: { suite: { with: { functionalRequirement: true } } },
   });
   if (!fixtureRow) return null;
 
@@ -118,7 +127,7 @@ export async function loadFixtureWithCases(
     fixtureId: fixtureRow.fixtureId,
     suiteId: fixtureRow.suiteId,
     title: fixtureRow.title,
-    baseUrl: fixtureRow.baseUrl ?? undefined,
+    baseUrl: resolveFixtureBaseUrl(fixtureRow.suite?.functionalRequirement?.baseUrl, fixtureRow.baseUrl),
     commonInput: fixtureRow.commonInput ?? {},
     setupScript: fixtureRow.setupScript ?? undefined,
     teardownScript: fixtureRow.teardownScript ?? undefined,

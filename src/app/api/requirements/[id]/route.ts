@@ -7,6 +7,7 @@ import { functionalRequirements } from "@/db/schema";
 const updateSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),
+  baseUrl: z.string().url().optional().or(z.literal("")),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -20,9 +21,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
+  const { baseUrl, ...rest } = parsed.data;
+  const updateValues: Record<string, unknown> = { ...rest, updatedAt: new Date() };
+  if (baseUrl !== undefined) updateValues.baseUrl = baseUrl || null;
+
   const [updated] = await db
     .update(functionalRequirements)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set(updateValues)
     .where(eq(functionalRequirements.id, id))
     .returning();
 
