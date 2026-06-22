@@ -16,7 +16,7 @@ export const testStatusEnum = pgEnum("test_status", [
   "error",
 ]);
 
-export const scriptTypeEnum = pgEnum("script_type", ["single", "multi"]);
+export const scriptTypeEnum = pgEnum("script_type", ["single", "multi", "scripted"]);
 
 export const functionalRequirements = pgTable("functional_requirements", {
   id: text("id").primaryKey(),
@@ -67,6 +67,9 @@ export const testCases = pgTable("test_cases", {
   input: jsonb("input").$type<Record<string, unknown>>().default({}),
   runs: jsonb("runs").$type<Record<string, unknown>[]>().default([]),
   expected: jsonb("expected").$type<Record<string, unknown>>().default({}),
+  // Raw TestCafe test body for scriptType "scripted" — used for multi-step
+  // flows that don't fit the generic fill-fields/submit/assert model.
+  script: text("script"),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

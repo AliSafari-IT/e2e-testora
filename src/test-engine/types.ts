@@ -21,7 +21,7 @@ export interface TestFixtureDefinition {
   teardownScript?: string;
 }
 
-export type ScriptType = "single" | "multi";
+export type ScriptType = "single" | "multi" | "scripted";
 
 export interface TestCaseDefinition {
   caseId: string;
@@ -31,6 +31,8 @@ export interface TestCaseDefinition {
   input?: Record<string, unknown>;
   runs?: Record<string, unknown>[];
   expected: Record<string, unknown>;
+  // Raw TestCafe test body, used only when scriptType is "scripted".
+  script?: string;
 }
 
 export type TestStatus = "pending" | "running" | "passed" | "failed" | "error";

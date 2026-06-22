@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getTestFixtures } from "@/lib/queries";
+import { db } from "@/db/client";
+import { testFixtures } from "@/db/schema";
 
 export async function GET() {
   const fixtures = await getTestFixtures();
@@ -10,4 +13,39 @@ export async function GET() {
       caseCount: fixture.cases.length,
     })),
   );
+}
+
+const createSchema = z.object({
+  fixtureId: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),
+  suiteId: z.string().min(1),
+  title: z.string().min(1),
+  baseUrl: z.string().url().optional().or(z.literal("")),
+  commonInput: z.record(z.unknown()).default({}),
+});
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { baseUrl, ...rest } = parsed.data;
+
+  try {
+    const [fixture] = await db
+      .insert(testFixtures)
+      .values({ ...rest, baseUrl: baseUrl || null })
+      .returning();
+    return NextResponse.json({ fixture }, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: isUniqueViolation(error) ? `A fixture with id "${parsed.data.fixtureId}" already exists.` : "Failed to create fixture" },
+      { status: isUniqueViolation(error) ? 409 : 500 },
+    );
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: string }).code === "23505");
 }

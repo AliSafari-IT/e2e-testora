@@ -2,6 +2,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { Writable } from "node:stream";
 import createTestCafe from "testcafe";
 import { db } from "@/db/client";
 import { testCases, testFixtures, testResults } from "@/db/schema";
@@ -12,7 +13,11 @@ import type { TestCaseDefinition, TestFixtureDefinition, TestRunResult } from "@
 export interface ExecuteFixtureOptions {
   browser?: string;
   headless?: boolean;
+  onLog?: (line: string) => void;
 }
+
+// eslint-disable-next-line no-control-regex
+const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 
 export async function executeFixture(
   fixture: TestFixtureDefinition,
@@ -27,11 +32,27 @@ export async function executeFixture(
   const testcafe = await createTestCafe();
   const results: TestRunResult[] = [];
 
+  const logStream = new Writable({
+    write(chunk, _encoding, callback) {
+      if (options.onLog) {
+        const text = chunk.toString("utf8").replace(ANSI_PATTERN, "");
+        for (const line of text.split("\n")) {
+          if (line.trim().length > 0) options.onLog(line);
+        }
+      }
+      callback();
+    },
+  });
+
   try {
     const runner = testcafe.createRunner();
     const browser = options.browser ?? (options.headless === false ? "chrome" : "chrome:headless");
     const startedAt = Date.now();
-    const failedCount: number = await runner.src(specPath).browsers(browser).run();
+    const failedCount: number = await runner
+      .src(specPath)
+      .browsers(browser)
+      .reporter("spec", logStream)
+      .run();
 
     const status = failedCount === 0 ? "passed" : "failed";
     for (const testCase of cases) {
@@ -111,6 +132,7 @@ export async function loadFixtureWithCases(
     input: row.input ?? undefined,
     runs: row.runs ?? undefined,
     expected: row.expected ?? {},
+    script: row.script ?? undefined,
   }));
 
   return { fixture, cases };

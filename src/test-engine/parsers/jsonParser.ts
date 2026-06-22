@@ -33,10 +33,11 @@ const caseSchema = z.object({
   caseId: z.string().min(1),
   fixtureId: z.string().min(1),
   title: z.string().min(1),
-  scriptType: z.enum(["single", "multi"]),
+  scriptType: z.enum(["single", "multi", "scripted"]),
   input: z.record(z.unknown()).optional(),
   runs: z.array(z.record(z.unknown())).optional(),
   expected: z.record(z.unknown()),
+  script: z.string().optional(),
 });
 
 export function parseFunctionalRequirement(json: unknown): FunctionalRequirementDefinition {
@@ -58,6 +59,9 @@ export function parseTestCase(json: unknown): TestCaseDefinition {
   }
   if (parsed.scriptType === "single" && !parsed.input) {
     throw new Error(`Test case "${parsed.caseId}" is single-run but has no input defined.`);
+  }
+  if (parsed.scriptType === "scripted" && !parsed.script?.trim()) {
+    throw new Error(`Test case "${parsed.caseId}" is scripted but has no script defined.`);
   }
   return parsed;
 }

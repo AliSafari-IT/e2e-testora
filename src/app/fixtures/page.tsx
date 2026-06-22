@@ -1,13 +1,11 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { getTestFixtures } from "@/lib/queries";
+import { FixtureCard } from "@/components/entities/fixture-card";
+import { getTestFixtures, getTestSuites } from "@/lib/queries";
 
 export default async function FixturesPage() {
-  const fixtures = await getTestFixtures();
+  const [fixtures, suites] = await Promise.all([getTestFixtures(), getTestSuites()]);
+  const suiteOptions = suites.map((suite) => ({ suiteId: suite.suiteId, title: suite.title }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -18,23 +16,19 @@ export default async function FixturesPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {fixtures.map((fixture) => (
-          <Card key={fixture.fixtureId}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>{fixture.title}</CardTitle>
-                <Badge variant="outline">{fixture.cases.length} case(s)</Badge>
-              </div>
-              <CardDescription>Suite: {fixture.suite?.title ?? fixture.suiteId}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
-                {JSON.stringify(fixture.commonInput, null, 2)}
-              </pre>
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/run?fixtureId=${fixture.fixtureId}`}>Run this fixture</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <FixtureCard
+            key={fixture.fixtureId}
+            fixture={{
+              fixtureId: fixture.fixtureId,
+              suiteId: fixture.suiteId,
+              title: fixture.title,
+              baseUrl: fixture.baseUrl,
+              commonInput: fixture.commonInput ?? {},
+              caseCount: fixture.cases.length,
+            }}
+            suiteTitle={fixture.suite?.title}
+            suiteOptions={suiteOptions}
+          />
         ))}
         {fixtures.length === 0 && <p className="text-muted-foreground">No test fixtures yet.</p>}
       </div>

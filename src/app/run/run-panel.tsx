@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, PlayCircle } from "lucide-react";
+import { Check, Copy, Loader2, PlayCircle, Terminal } from "lucide-react";
 
 interface FixtureSummary {
   fixtureId: string;
@@ -30,6 +30,10 @@ export function RunPanel() {
   const [running, setRunning] = useState(false);
   const [reports, setReports] = useState<ReportEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     fetch("/api/fixtures")
@@ -42,11 +46,28 @@ export function RunPanel() {
       });
   }, [selectedFixtureId]);
 
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ block: "end" });
+  }, [logs]);
+
+  useEffect(() => {
+    return () => eventSourceRef.current?.close();
+  }, []);
+
+  async function copyLogs() {
+    await navigator.clipboard.writeText(logs.join("\n"));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   async function runFixture() {
     if (!selectedFixtureId) return;
     setRunning(true);
     setError(null);
     setReports(null);
+    setLogs([]);
+    eventSourceRef.current?.close();
+
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -55,13 +76,30 @@ export function RunPanel() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ? JSON.stringify(data.error) : "Run failed");
-      } else {
-        setReports(data.reports);
+        setError(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+        setRunning(false);
+        return;
       }
+
+      const eventSource = new EventSource(`/api/run/stream/${data.runId}`);
+      eventSourceRef.current = eventSource;
+
+      eventSource.addEventListener("log", (event) => {
+        setLogs((prev) => [...prev, JSON.parse(event.data)]);
+      });
+      eventSource.addEventListener("done", (event) => {
+        setReports(JSON.parse(event.data));
+        setRunning(false);
+        eventSource.close();
+      });
+      eventSource.addEventListener("error", (event) => {
+        const messageEvent = event as MessageEvent<string>;
+        setError(messageEvent.data ? JSON.parse(messageEvent.data) : "Run failed");
+        setRunning(false);
+        eventSource.close();
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed");
-    } finally {
       setRunning(false);
     }
   }
@@ -92,6 +130,39 @@ export function RunPanel() {
           </Button>
         </CardContent>
       </Card>
+
+      {(running || logs.length > 0) && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Terminal className="h-4 w-4" />
+                  Live console
+                </CardTitle>
+                <CardDescription>
+                  {running ? "TestCafe is running..." : "Output from the last run."}
+                </CardDescription>
+              </div>
+              <Button size="sm" variant="outline" onClick={copyLogs} disabled={logs.length === 0}>
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? "Copied" : "Copy log"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-80 overflow-y-auto rounded-md bg-black/60 p-3 font-mono text-xs leading-relaxed text-green-300">
+              {logs.length === 0 && <p className="text-muted-foreground">Waiting for output...</p>}
+              {logs.map((line, index) => (
+                <div key={index} className="whitespace-pre-wrap">
+                  {line}
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Card>
