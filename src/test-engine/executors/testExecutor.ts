@@ -49,10 +49,21 @@ export async function executeFixture(
     const runner = testcafe.createRunner();
     const browser = options.browser ?? (options.headless === false ? "chrome" : "chrome:headless");
     const startedAt = Date.now();
+    // Capture per-test outcomes (name, duration, formatted errors) alongside the
+    // human-readable spec stream, so stored results carry the *same* error text
+    // shown in the live console — not just a fixture-level pass/fail.
+    const captured: CapturedTest[] = [];
+    // TestCafe accepts a reporter-plugin *factory* as a reporter `name` at
+    // runtime, but its typings only permit built-in string names — hence the
+    // cast. The "spec" reporter still streams to the live console.
+    const reporters = [
+      { name: "spec", output: logStream },
+      { name: createCaptureReporter(captured) },
+    ] as unknown as string;
     const failedCount: number = await runner
       .src(specPath)
       .browsers(browser)
-      .reporter("spec", logStream)
+      .reporter(reporters)
       .run({
         // Local dev environments (Next.js JIT-compiling routes on first
         // request) can be much slower than production — give navigation
@@ -62,9 +73,25 @@ export async function executeFixture(
         ajaxRequestTimeout: 60000,
       });
 
-    const status = failedCount === 0 ? "passed" : "failed";
-    for (const testCase of cases) {
-      results.push(buildResult(testCase, status, null, Date.now() - startedAt, {}, null));
+    if (captured.length > 0) {
+      // One result row per executed test (per run), mapped back to its case.
+      const titleToCaseId = new Map(cases.map((testCase) => [testCase.title, testCase.caseId]));
+      for (const test of captured) {
+        const { title, runIndex } = parseTestName(test.name);
+        const caseId = titleToCaseId.get(title) ?? title;
+        const errorMessage = test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
+        results.push(
+          buildResult(caseId, test.failed ? "failed" : "passed", runIndex, test.durationMs, {}, errorMessage),
+        );
+      }
+    } else {
+      // Nothing captured (e.g. a compile/startup error before any test ran) —
+      // still record the fixture-level outcome so the run is visible.
+      const status = failedCount === 0 ? "passed" : "failed";
+      const elapsed = Date.now() - startedAt;
+      for (const testCase of cases) {
+        results.push(buildResult(testCase.caseId, status, null, elapsed, {}, null));
+      }
     }
   } finally {
     await testcafe.close();
@@ -76,7 +103,7 @@ export async function executeFixture(
 }
 
 function buildResult(
-  testCase: TestCaseDefinition,
+  caseId: string,
   status: TestRunResult["status"],
   runIndex: number | null,
   durationMs: number,
@@ -85,7 +112,7 @@ function buildResult(
 ): TestRunResult {
   return {
     id: randomUUID(),
-    caseId: testCase.caseId,
+    caseId,
     status,
     runIndex,
     durationMs,
@@ -93,6 +120,52 @@ function buildResult(
     errorMessage,
     createdAt: new Date().toISOString(),
   };
+}
+
+interface CapturedTest {
+  name: string;
+  errs: string[];
+  durationMs: number;
+  failed: boolean;
+}
+
+// Minimal view of the TestCafe ReporterPluginHost that our methods run on.
+interface ReporterHost {
+  formatError(err: unknown, prefix?: string): string;
+}
+
+/**
+ * A custom TestCafe reporter that records each test's name, duration and
+ * formatted errors into `collector`. TestCafe merges these methods onto a host
+ * that provides `formatError()` (the very formatter the built-in reporters use
+ * for their error blocks), so the captured text matches the live console.
+ */
+function createCaptureReporter(collector: CapturedTest[]) {
+  return function reporterPluginFactory() {
+    return {
+      reportTaskStart() {},
+      reportFixtureStart() {},
+      reportTestDone(name: string, testRunInfo: { errs?: unknown[]; durationMs?: number }) {
+        const host = this as unknown as ReporterHost;
+        const rawErrs = Array.isArray(testRunInfo.errs) ? testRunInfo.errs : [];
+        const errs = rawErrs.map((err) => host.formatError(err).replace(ANSI_PATTERN, "").trimEnd());
+        collector.push({
+          name,
+          errs,
+          durationMs: testRunInfo.durationMs ?? 0,
+          failed: rawErrs.length > 0,
+        });
+      },
+      reportTaskDone() {},
+    };
+  };
+}
+
+/** "Some title (run 2)" → { title: "Some title", runIndex: 1 }. */
+function parseTestName(name: string): { title: string; runIndex: number | null } {
+  const match = /^(.*?)\s+\(run (\d+)\)$/.exec(name);
+  if (match) return { title: match[1] ?? name, runIndex: Number(match[2]) - 1 };
+  return { title: name, runIndex: null };
 }
 
 async function persistResults(results: TestRunResult[]): Promise<void> {
