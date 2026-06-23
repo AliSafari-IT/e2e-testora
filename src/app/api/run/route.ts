@@ -3,7 +3,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { executeFixture, loadFixtureWithCases } from "@/test-engine/executors/testExecutor";
 import { toJsonReport } from "@/test-engine/formatters/resultFormatter";
-import { createRun, appendLog, completeRun, failRun } from "@/test-engine/executors/runLog";
+import { createRun, appendLog, completeRun, failRun, getRun } from "@/test-engine/executors/runLog";
 import { db } from "@/db/client";
 import { testSuites } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -41,14 +41,19 @@ async function runInBackground(
     appendLog(runId, `Starting run for fixture "${fixture.title}" (${cases.length} case(s))...`);
     const suite = await db.query.testSuites.findFirst({ where: eq(testSuites.suiteId, fixture.suiteId) });
 
+    const run = getRun(runId);
     const results = await executeFixture(fixture, cases, {
       onLog: (line) => appendLog(runId, line),
+      signal: run?.abortController.signal,
     });
 
     const reports = toJsonReport(suite?.title ?? fixture.suiteId, fixture, cases, results);
     appendLog(runId, `Run complete: ${reports.length} case(s) executed.`);
     completeRun(runId, reports);
   } catch (error) {
-    failRun(runId, error instanceof Error ? error.message : "Run failed");
+    const run = getRun(runId);
+    if (!run?.done) {
+      failRun(runId, error instanceof Error ? error.message : "Run failed");
+    }
   }
 }

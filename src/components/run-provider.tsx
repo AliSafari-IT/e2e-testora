@@ -26,6 +26,7 @@ interface RunContextValue {
   error: string | null;
   runId: string | null;
   startRun: (fixtureId: string) => Promise<void>;
+  cancelRun: () => Promise<void>;
 }
 
 const RunContext = createContext<RunContextValue | null>(null);
@@ -116,6 +117,20 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     return () => esRef.current?.close();
   }, [attach]);
 
+  const cancelRun = useCallback(async () => {
+    if (!runId) return;
+    esRef.current?.close();
+    try {
+      await fetch(`/api/run/${runId}`, { method: "DELETE" });
+    } catch {
+      /* ignore */
+    }
+    setRunning(false);
+    setError("Run cancelled");
+    setRunId(null);
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  }, [runId]);
+
   const startRun = useCallback(
     async (fixtureId: string) => {
       if (!fixtureId) return;
@@ -160,6 +175,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         error,
         runId,
         startRun,
+        cancelRun,
       }}
     >
       {children}

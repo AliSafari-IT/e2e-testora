@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Copy, Loader2, PlayCircle, Terminal } from "lucide-react";
+import { Check, Copy, Loader2, PlayCircle, StopCircle, Terminal } from "lucide-react";
 import { useRun } from "@/components/run-provider";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +40,7 @@ export function RunPanel() {
   const searchParams = useSearchParams();
   // Run state lives in RunProvider (mounted in the layout) so it survives
   // navigating to other routes while a run is in progress.
-  const { selectedFixtureId, setSelectedFixtureId, running, logs, reports, error, startRun } =
+  const { selectedFixtureId, setSelectedFixtureId, running, logs, reports, error, startRun, cancelRun } =
     useRun();
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
   const [copied, setCopied] = useState(false);
@@ -94,6 +94,12 @@ export function RunPanel() {
             {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
             {running ? "Running..." : "Run fixture"}
           </Button>
+          {running && (
+            <Button variant="destructive" onClick={() => void cancelRun()}>
+              <StopCircle className="h-4 w-4" />
+              Cancel
+            </Button>
+          )}
           {running && (
             <span className="text-xs text-muted-foreground">
               The run keeps streaming if you switch pages.

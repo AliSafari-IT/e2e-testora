@@ -15,6 +15,7 @@ export interface ExecuteFixtureOptions {
   browser?: string;
   headless?: boolean;
   onLog?: (line: string) => void;
+  signal?: AbortSignal;
 }
 
 // eslint-disable-next-line no-control-regex
@@ -45,8 +46,11 @@ export async function executeFixture(
     },
   });
 
+  let abortHandler: (() => void) | undefined;
   try {
     const runner = testcafe.createRunner();
+    abortHandler = () => { Promise.resolve(runner.stop()).catch(() => { /* suppress WebSocket close noise on cancel */ }); };
+    options.signal?.addEventListener("abort", abortHandler);
     const browser = options.browser ?? (options.headless === false ? "chrome" : "chrome:headless");
     const startedAt = Date.now();
     // Capture per-test outcomes (name, duration, formatted errors) alongside the
@@ -60,18 +64,27 @@ export async function executeFixture(
       { name: "spec", output: logStream },
       { name: createCaptureReporter(captured) },
     ] as unknown as string;
-    const failedCount: number = await runner
-      .src(specPath)
-      .browsers(browser)
-      .reporter(reporters)
-      .run({
-        // Local dev environments (Next.js JIT-compiling routes on first
-        // request) can be much slower than production — give navigation
-        // and in-page AJAX calls a generous ceiling on top of any explicit
-        // per-selector timeouts in the test scripts themselves.
-        pageLoadTimeout: 60000,
-        ajaxRequestTimeout: 60000,
-      });
+    let failedCount: number;
+    try {
+      failedCount = await runner
+        .src(specPath)
+        .browsers(browser)
+        .reporter(reporters)
+        .run({
+          // Local dev environments (Next.js JIT-compiling routes on first
+          // request) can be much slower than production — give navigation
+          // and in-page AJAX calls a generous ceiling on top of any explicit
+          // per-selector timeouts in the test scripts themselves.
+          pageLoadTimeout: 60000,
+          ajaxRequestTimeout: 60000,
+        });
+    } catch (runErr) {
+      // When the run is cancelled via runner.stop(), TestCafe / chrome-remote-interface
+      // throws a "WebSocket connection closed" error. Swallow it silently if the
+      // signal was aborted; otherwise re-throw so the caller sees a real failure.
+      if (options.signal?.aborted) return results;
+      throw runErr;
+    }
 
     if (captured.length > 0) {
       // One result row per executed test (per run), mapped back to its case.
@@ -94,6 +107,7 @@ export async function executeFixture(
       }
     }
   } finally {
+    if (abortHandler) options.signal?.removeEventListener("abort", abortHandler);
     await testcafe.close();
     await rm(dir, { recursive: true, force: true });
   }

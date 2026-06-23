@@ -6,6 +6,7 @@ export interface RunRecord {
   done: boolean;
   result?: unknown;
   error?: string;
+  abortController: AbortController;
 }
 
 // Each Next.js route handler is compiled into its own bundle, so a plain
@@ -17,7 +18,17 @@ const runs = globalForRuns.__e2eTestoraRuns ?? new Map<string, RunRecord>();
 globalForRuns.__e2eTestoraRuns = runs;
 
 export function createRun(runId: string): void {
-  runs.set(runId, { emitter: new EventEmitter(), lines: [], done: false });
+  runs.set(runId, { emitter: new EventEmitter(), lines: [], done: false, abortController: new AbortController() });
+}
+
+export function cancelRun(runId: string): boolean {
+  const run = runs.get(runId);
+  if (!run || run.done) return false;
+  run.abortController.abort();
+  run.done = true;
+  run.error = "Run cancelled";
+  run.emitter.emit("error", "Run cancelled");
+  return true;
 }
 
 export function appendLog(runId: string, line: string): void {
