@@ -64,3 +64,60 @@ export async function getTestResults(limit = 50) {
     with: { case: true },
   });
 }
+
+export interface ReportResultRow {
+  id: string;
+  status: string;
+  runIndex: number | null;
+  durationMs: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  caseId: string;
+  caseTitle: string;
+  fixtureId: string;
+  fixtureTitle: string;
+  suiteId: string;
+  suiteTitle: string;
+  frId: string;
+  frTitle: string;
+}
+
+/**
+ * Flattened results joined all the way up the hierarchy
+ * (result → case → fixture → suite → functional requirement) so the Results
+ * page can filter by any level and export a self-contained report.
+ */
+export async function getResultsForReport(limit = 1000): Promise<ReportResultRow[]> {
+  const rows = await db.query.testResults.findMany({
+    orderBy: desc(testResults.createdAt),
+    limit,
+    with: {
+      case: {
+        with: { fixture: { with: { suite: { with: { functionalRequirement: true } } } } },
+      },
+    },
+  });
+
+  return rows.map((row) => {
+    const fixture = row.case?.fixture;
+    const suite = fixture?.suite;
+    const fr = suite?.functionalRequirement;
+    return {
+      id: row.id,
+      status: row.status,
+      runIndex: row.runIndex,
+      durationMs: row.durationMs,
+      errorMessage: row.errorMessage,
+      createdAt:
+        row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+      caseId: row.caseId,
+      caseTitle: row.case?.title ?? row.caseId,
+      fixtureId: fixture?.fixtureId ?? "",
+      fixtureTitle: fixture?.title ?? "",
+      suiteId: suite?.suiteId ?? "",
+      suiteTitle: suite?.title ?? "",
+      frId: fr?.id ?? "",
+      frTitle: fr?.title ?? "",
+    };
+  });
+}

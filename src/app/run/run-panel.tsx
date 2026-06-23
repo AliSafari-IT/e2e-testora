@@ -7,11 +7,33 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Check, Copy, Loader2, PlayCircle, Terminal } from "lucide-react";
 import { useRun } from "@/components/run-provider";
+import { cn } from "@/lib/utils";
 
 interface FixtureSummary {
   fixtureId: string;
   title: string;
   caseCount: number;
+}
+
+// Colour a TestCafe console line by severity so failures stand out.
+function logLineClassName(line: string): string {
+  const l = line.trim();
+  if (
+    l.startsWith("×") || // failed test marker
+    /^\d+\)/.test(l) || // error detail, e.g. "1) AssertionError: ..."
+    /assertionerror|error[:\s]|exception|unhandled/i.test(l) ||
+    /\b\d+\/\d+\s+failed\b/.test(l) || // "1/2 failed"
+    /\bfailed\b/i.test(l)
+  ) {
+    return "text-red-400";
+  }
+  if (/^warning/i.test(l) || /warnings?\s*\(/i.test(l)) {
+    return "text-yellow-300";
+  }
+  if (l.startsWith("√") || /\bpassed\b/i.test(l)) {
+    return "text-emerald-300";
+  }
+  return "text-green-300/90";
 }
 
 export function RunPanel() {
@@ -100,10 +122,10 @@ export function RunPanel() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="max-h-80 overflow-y-auto rounded-md bg-black/60 p-3 font-mono text-xs leading-relaxed text-green-300">
+            <div className="max-h-80 overflow-y-auto rounded-md bg-black/60 p-3 font-mono text-xs leading-relaxed">
               {logs.length === 0 && <p className="text-muted-foreground">Waiting for output...</p>}
               {logs.map((line, index) => (
-                <div key={index} className="whitespace-pre-wrap">
+                <div key={index} className={cn("whitespace-pre-wrap", logLineClassName(line))}>
                   {line}
                 </div>
               ))}

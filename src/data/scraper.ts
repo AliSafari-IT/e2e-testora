@@ -180,7 +180,7 @@ export const scraperTestCases: TestCaseDefinition[] = [
         url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/1156943",
       },
       {
-        url: "https://www.booking.com/Share-aPkX8K0",
+        url: "https://www.booking.com/hotel/be/martin-s-patershof.nl.html?aid=397594&label=gog235jc-10CAEoggI46AdIHFgDaBWIAQGYATO4ARfIAQzYAQPoAQH4AQGIAgGoAgG4AorV5tEGwAIB0gIkNTE4YzE3NWYtODA0NS00MzZjLTg3MDQtOTc5MDdkYjA2NzUw2AIB4AIB-Share-aPkX8K0%401782164135&sid=d60caa7ead2a1fc3e939d00e00ca8fd3&all_sr_blocks=4416307_390503062_2_2_0&checkin=2026-08-02&checkout=2026-08-03&dest_id=-1964894&dest_type=city&dist=0&group_adults=2&group_children=0&hapos=1&highlighted_blocks=4416307_390503062_2_2_0&hpos=1&matching_block_id=4416307_390503062_2_2_0&no_rooms=1&req_adults=2&req_children=0&room1=A%2CA&sb_price_type=total&sr_order=popularity&sr_pri_blocks=4416307_390503062_2_2_0__13673&srepoch=1782200955&srpvid=b6a336f316c1010b&type=total&ucfs=1&",
       },
     ],
     expected: {},
