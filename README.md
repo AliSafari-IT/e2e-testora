@@ -122,13 +122,6 @@ Automated tests (unit / integration) are not included by default — add your pr
 
 ## License & Credits
 - This project uses common OSS tools: Next.js, Tailwind CSS, Drizzle, and `pnpm`.
-- Add your project's license file (e.g., `LICENSE`) at the repo root.
-
----
-
-If you'd like, I can:
-- commit this `README.md` to a branch
-- expand sections with sample API requests and example environment variables
-- add a `.env.example` template
-
-Feel free to tell me which of these you'd like next.
+- Released under the [MIT License](LICENSE) — you're free to use, modify, and distribute it,
+  including commercially. The software is provided **"as is"**, without warranty of any kind; the
+  author accepts no liability for any damage, data loss, or other problems arising from its use.

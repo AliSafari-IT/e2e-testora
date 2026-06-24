@@ -10,6 +10,7 @@ import {
   FlaskConical,
   PlayCircle,
   FileBarChart,
+  BookOpen,
   Loader2,
   Menu,
   X,
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/cases", label: "Test Cases", icon: FlaskConical },
   { href: "/run", label: "Run Tests", icon: PlayCircle },
   { href: "/results", label: "Results", icon: FileBarChart },
+  { href: "/about", label: "About & Guide", icon: BookOpen },
 ];
 
 export function SidebarNav() {

@@ -2,6 +2,8 @@
   "name": "e2e-testora",
   "version": "1.0.0",
   "description": "E2E test automation platform: define functional requirements, suites, fixtures and cases, run them with TestCafe, and store results in PostgreSQL.",
+  "author": "Ali Safari <asafarim@gmail.com>",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
