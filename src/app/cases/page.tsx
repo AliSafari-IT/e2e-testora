@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { CaseCard } from "@/components/entities/case-card";
+import { CollapsibleCaseForm } from "@/components/forms/collapsible-case-form";
 import { getTestCases, getTestFixtures } from "@/lib/queries";
 
 export default async function CasesPage() {
@@ -14,7 +15,9 @@ export default async function CasesPage() {
         <p className="text-muted-foreground">Single-run, multi-run and scripted scenarios driven by test data.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <CollapsibleCaseForm fixtureOptions={fixtureOptions} />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {cases.map((testCase) => (
           <CaseCard
             key={testCase.caseId}

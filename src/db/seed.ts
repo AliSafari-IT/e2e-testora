@@ -32,6 +32,12 @@ import {
   registerUiFixture,
   registrationTestCases,
 } from "@/data/registration";
+import {
+  adminConsoleFR,
+  adminConsoleSuites,
+  adminConsoleFixtures,
+  adminConsoleCases,
+} from "@/data/admin";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
@@ -64,6 +70,12 @@ const bundles: SeedBundle[] = [
     suites: [registerFlowSuite],
     fixtures: [registerApiFixture, registerUiFixture],
     cases: registrationTestCases,
+  },
+  {
+    fr: adminConsoleFR,
+    suites: adminConsoleSuites,
+    fixtures: adminConsoleFixtures,
+    cases: adminConsoleCases,
   },
 ];
 
