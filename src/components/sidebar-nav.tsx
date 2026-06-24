@@ -10,13 +10,13 @@ import {
   FlaskConical,
   PlayCircle,
   FileBarChart,
-  Sparkles,
   Loader2,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRun } from "@/components/run-provider";
+import { Logo } from "@/components/logo";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -51,7 +51,7 @@ export function SidebarNav() {
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-accent" />
+          <Logo className="h-7 w-7" />
           <span className="text-base font-semibold">e2e-testora</span>
         </div>
         {running && (
@@ -81,7 +81,7 @@ export function SidebarNav() {
       >
         <div className="mb-6 flex items-center justify-between px-2">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-accent" />
+            <Logo className="h-8 w-8" />
             <span className="text-lg font-semibold">e2e-testora</span>
           </div>
           {/* Close button — drawer only. */}

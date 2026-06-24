@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { testSuites } from "@/db/schema";
+import { getSuiteSummaries } from "@/lib/queries";
+
+export async function GET() {
+  return NextResponse.json(await getSuiteSummaries());
+}
 
 const createSchema = z.object({
   suiteId: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),

@@ -17,6 +17,15 @@ export interface ReportEntry {
   details: Record<string, unknown>;
 }
 
+// A run can be scoped to a single fixture, a whole suite, or a whole
+// functional requirement (every fixture beneath it runs in turn).
+export type RunScope = "fixture" | "suite" | "requirement";
+
+export interface RunTarget {
+  scope: RunScope;
+  id: string;
+}
+
 interface RunContextValue {
   selectedFixtureId: string;
   setSelectedFixtureId: (id: string) => void;
@@ -25,9 +34,16 @@ interface RunContextValue {
   reports: ReportEntry[] | null;
   error: string | null;
   runId: string | null;
-  startRun: (fixtureId: string) => Promise<void>;
+  startRun: (target: RunTarget) => Promise<void>;
   cancelRun: () => Promise<void>;
 }
+
+// Maps a run scope to the request-body key the /api/run endpoint expects.
+const SCOPE_BODY_KEY: Record<RunScope, "fixtureId" | "suiteId" | "frId"> = {
+  fixture: "fixtureId",
+  suite: "suiteId",
+  requirement: "frId",
+};
 
 const RunContext = createContext<RunContextValue | null>(null);
 
@@ -132,8 +148,8 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
   }, [runId]);
 
   const startRun = useCallback(
-    async (fixtureId: string) => {
-      if (!fixtureId) return;
+    async (target: RunTarget) => {
+      if (!target.id) return;
       setRunning(true);
       setError(null);
       setReports(null);
@@ -142,7 +158,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fixtureId }),
+          body: JSON.stringify({ [SCOPE_BODY_KEY[target.scope]]: target.id }),
         });
         const data = await res.json();
         if (!res.ok) {

@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { functionalRequirements } from "@/db/schema";
+import { getRequirementSummaries } from "@/lib/queries";
+
+export async function GET() {
+  return NextResponse.json(await getRequirementSummaries());
+}
 
 const createSchema = z.object({
   id: z.string().min(1).regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers and hyphens"),

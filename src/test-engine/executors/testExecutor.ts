@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import createTestCafe from "testcafe";
 import { db } from "@/db/client";
-import { testCases, testFixtures, testResults } from "@/db/schema";
+import { functionalRequirements, testCases, testFixtures, testResults, testSuites } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateTestSpec } from "@/test-engine/generators/testGenerator";
 import { resolveFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
@@ -210,17 +210,42 @@ export async function loadFixtureWithCases(
     where: eq(testCases.fixtureId, fixtureId),
   });
 
-  const fixture: TestFixtureDefinition = {
-    fixtureId: fixtureRow.fixtureId,
-    suiteId: fixtureRow.suiteId,
-    title: fixtureRow.title,
-    baseUrl: resolveFixtureBaseUrl(fixtureRow.suite?.functionalRequirement?.baseUrl, fixtureRow.baseUrl),
-    commonInput: fixtureRow.commonInput ?? {},
-    setupScript: fixtureRow.setupScript ?? undefined,
-    teardownScript: fixtureRow.teardownScript ?? undefined,
-  };
+  const fixture = mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl);
+  const cases = caseRows.map(mapCaseRow);
 
-  const cases: TestCaseDefinition[] = caseRows.map((row) => ({
+  return { fixture, cases };
+}
+
+// A single fixture-worth of work, annotated with its suite title so the
+// aggregated report can attribute each case to the right suite.
+export interface RunUnit {
+  suiteTitle: string;
+  fixture: TestFixtureDefinition;
+  cases: TestCaseDefinition[];
+}
+
+export interface RunPlan {
+  label: string;
+  units: RunUnit[];
+}
+
+type FixtureRow = typeof testFixtures.$inferSelect;
+type CaseRow = typeof testCases.$inferSelect;
+
+function mapFixtureRow(row: FixtureRow, frBaseUrl: string | null | undefined): TestFixtureDefinition {
+  return {
+    fixtureId: row.fixtureId,
+    suiteId: row.suiteId,
+    title: row.title,
+    baseUrl: resolveFixtureBaseUrl(frBaseUrl, row.baseUrl),
+    commonInput: row.commonInput ?? {},
+    setupScript: row.setupScript ?? undefined,
+    teardownScript: row.teardownScript ?? undefined,
+  };
+}
+
+function mapCaseRow(row: CaseRow): TestCaseDefinition {
+  return {
     caseId: row.caseId,
     fixtureId: row.fixtureId,
     title: row.title,
@@ -229,7 +254,66 @@ export async function loadFixtureWithCases(
     runs: row.runs ?? undefined,
     expected: row.expected ?? {},
     script: row.script ?? undefined,
-  }));
+  };
+}
 
-  return { fixture, cases };
+/** Build a one-fixture run plan. */
+export async function loadFixtureRunPlan(fixtureId: string): Promise<RunPlan | null> {
+  const fixtureRow = await db.query.testFixtures.findFirst({
+    where: eq(testFixtures.fixtureId, fixtureId),
+    with: { suite: { with: { functionalRequirement: true } }, cases: true },
+  });
+  if (!fixtureRow) return null;
+
+  return {
+    label: `fixture "${fixtureRow.title}"`,
+    units: [
+      {
+        suiteTitle: fixtureRow.suite?.title ?? fixtureRow.suiteId,
+        fixture: mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl),
+        cases: fixtureRow.cases.map(mapCaseRow),
+      },
+    ],
+  };
+}
+
+/** Build a run plan covering every fixture in a suite. */
+export async function loadSuiteRunPlan(suiteId: string): Promise<RunPlan | null> {
+  const suiteRow = await db.query.testSuites.findFirst({
+    where: eq(testSuites.suiteId, suiteId),
+    with: { functionalRequirement: true, fixtures: { with: { cases: true } } },
+  });
+  if (!suiteRow) return null;
+
+  const frBaseUrl = suiteRow.functionalRequirement?.baseUrl;
+  return {
+    label: `suite "${suiteRow.title}"`,
+    units: suiteRow.fixtures.map((fixtureRow) => ({
+      suiteTitle: suiteRow.title,
+      fixture: mapFixtureRow(fixtureRow, frBaseUrl),
+      cases: fixtureRow.cases.map(mapCaseRow),
+    })),
+  };
+}
+
+/** Build a run plan covering every fixture across every suite of a requirement. */
+export async function loadRequirementRunPlan(frId: string): Promise<RunPlan | null> {
+  const frRow = await db.query.functionalRequirements.findFirst({
+    where: eq(functionalRequirements.id, frId),
+    with: { suites: { with: { fixtures: { with: { cases: true } } } } },
+  });
+  if (!frRow) return null;
+
+  const units: RunUnit[] = [];
+  for (const suiteRow of frRow.suites) {
+    for (const fixtureRow of suiteRow.fixtures) {
+      units.push({
+        suiteTitle: suiteRow.title,
+        fixture: mapFixtureRow(fixtureRow, frRow.baseUrl),
+        cases: fixtureRow.cases.map(mapCaseRow),
+      });
+    }
+  }
+
+  return { label: `requirement "${frRow.title}"`, units };
 }

@@ -1,15 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { executeFixture, loadFixtureWithCases } from "@/test-engine/executors/testExecutor";
+import {
+  executeFixture,
+  loadFixtureRunPlan,
+  loadSuiteRunPlan,
+  loadRequirementRunPlan,
+  type RunPlan,
+} from "@/test-engine/executors/testExecutor";
 import { toJsonReport } from "@/test-engine/formatters/resultFormatter";
 import { createRun, appendLog, completeRun, failRun, getRun } from "@/test-engine/executors/runLog";
-import { db } from "@/db/client";
-import { testSuites } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import type { TestCaseDefinition, TestFixtureDefinition } from "@/test-engine/types";
+import type { FormattedReport } from "@/test-engine/types";
 
-const requestSchema = z.object({ fixtureId: z.string().min(1) });
+// A run can be scoped to a single fixture, a whole suite, or a whole
+// functional requirement (every fixture beneath it). Exactly one id is given.
+const requestSchema = z.union([
+  z.object({ fixtureId: z.string().min(1) }),
+  z.object({ suiteId: z.string().min(1) }),
+  z.object({ frId: z.string().min(1) }),
+]);
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -18,36 +27,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const loaded = await loadFixtureWithCases(parsed.data.fixtureId);
-  if (!loaded) {
-    return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
+  const data = parsed.data;
+  const plan =
+    "fixtureId" in data
+      ? await loadFixtureRunPlan(data.fixtureId)
+      : "suiteId" in data
+        ? await loadSuiteRunPlan(data.suiteId)
+        : await loadRequirementRunPlan(data.frId);
+
+  if (!plan) {
+    return NextResponse.json({ error: "Run target not found" }, { status: 404 });
   }
 
-  const { fixture, cases } = loaded;
+  const runnableUnits = plan.units.filter((unit) => unit.cases.length > 0);
+  if (runnableUnits.length === 0) {
+    return NextResponse.json({ error: "No test cases to run for this selection" }, { status: 400 });
+  }
+
   const runId = randomUUID();
   createRun(runId);
 
-  void runInBackground(runId, fixture, cases);
+  void runInBackground(runId, { ...plan, units: runnableUnits });
 
   return NextResponse.json({ runId }, { status: 202 });
 }
 
-async function runInBackground(
-  runId: string,
-  fixture: TestFixtureDefinition,
-  cases: TestCaseDefinition[],
-): Promise<void> {
+async function runInBackground(runId: string, plan: RunPlan): Promise<void> {
   try {
-    appendLog(runId, `Starting run for fixture "${fixture.title}" (${cases.length} case(s))...`);
-    const suite = await db.query.testSuites.findFirst({ where: eq(testSuites.suiteId, fixture.suiteId) });
+    const totalCases = plan.units.reduce((total, unit) => total + unit.cases.length, 0);
+    appendLog(
+      runId,
+      `Starting run for ${plan.label} — ${plan.units.length} fixture(s), ${totalCases} case(s)...`,
+    );
 
     const run = getRun(runId);
-    const results = await executeFixture(fixture, cases, {
-      onLog: (line) => appendLog(runId, line),
-      signal: run?.abortController.signal,
-    });
+    const reports: FormattedReport[] = [];
 
-    const reports = toJsonReport(suite?.title ?? fixture.suiteId, fixture, cases, results);
+    for (const unit of plan.units) {
+      if (run?.abortController.signal.aborted) break;
+      if (plan.units.length > 1) {
+        appendLog(runId, `── Fixture: ${unit.fixture.title} (${unit.cases.length} case(s)) ──`);
+      }
+      const results = await executeFixture(unit.fixture, unit.cases, {
+        onLog: (line) => appendLog(runId, line),
+        signal: run?.abortController.signal,
+      });
+      reports.push(...toJsonReport(unit.suiteTitle, unit.fixture, unit.cases, results));
+    }
+
     appendLog(runId, `Run complete: ${reports.length} case(s) executed.`);
     completeRun(runId, reports);
   } catch (error) {

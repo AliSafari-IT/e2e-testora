@@ -33,6 +33,38 @@ export async function getTestSuiteById(suiteId: string) {
   });
 }
 
+/** Lightweight suite list for the Run page picker, with fixture/case counts. */
+export async function getSuiteSummaries() {
+  const suites = await db.query.testSuites.findMany({
+    orderBy: desc(testSuites.createdAt),
+    with: { fixtures: { with: { cases: { columns: { caseId: true } } } } },
+  });
+  return suites.map((suite) => ({
+    suiteId: suite.suiteId,
+    title: suite.title,
+    fixtureCount: suite.fixtures.length,
+    caseCount: suite.fixtures.reduce((total, fixture) => total + fixture.cases.length, 0),
+  }));
+}
+
+/** Lightweight requirement list for the Run page picker, with suite/fixture/case counts. */
+export async function getRequirementSummaries() {
+  const requirements = await db.query.functionalRequirements.findMany({
+    orderBy: desc(functionalRequirements.createdAt),
+    with: { suites: { with: { fixtures: { with: { cases: { columns: { caseId: true } } } } } } },
+  });
+  return requirements.map((requirement) => {
+    const fixtures = requirement.suites.flatMap((suite) => suite.fixtures);
+    return {
+      id: requirement.id,
+      title: requirement.title,
+      suiteCount: requirement.suites.length,
+      fixtureCount: fixtures.length,
+      caseCount: fixtures.reduce((total, fixture) => total + fixture.cases.length, 0),
+    };
+  });
+}
+
 export async function getTestFixtures() {
   return db.query.testFixtures.findMany({
     orderBy: desc(testFixtures.createdAt),
