@@ -5,11 +5,21 @@ import { randomUUID } from "node:crypto";
 import { Writable } from "node:stream";
 import createTestCafe from "testcafe";
 import { db } from "@/db/client";
-import { functionalRequirements, testCases, testFixtures, testResults, testSuites } from "@/db/schema";
+import {
+  functionalRequirements,
+  testCases,
+  testFixtures,
+  testResults,
+  testSuites,
+} from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { generateTestSpec } from "@/test-engine/generators/testGenerator";
 import { resolveFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
-import type { TestCaseDefinition, TestFixtureDefinition, TestRunResult } from "@/test-engine/types";
+import type {
+  TestCaseDefinition,
+  TestFixtureDefinition,
+  TestRunResult,
+} from "@/test-engine/types";
 
 export interface ExecuteFixtureOptions {
   browser?: string;
@@ -25,7 +35,8 @@ const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 // the Next.js dev server process (shared event loop, sandboxing, no /dev/shm on
 // some hosts). Harmless on a normal desktop, and they prevent the most common
 // "Cannot establish browser connection" launch failures.
-const HEADLESS_CHROME = "chrome:headless --no-sandbox --disable-gpu --disable-dev-shm-usage";
+const HEADLESS_CHROME =
+  "chrome:headless --no-sandbox --disable-gpu --disable-dev-shm-usage";
 
 /**
  * The browser string TestCafe should drive. Defaults to a hardened headless
@@ -36,14 +47,16 @@ const HEADLESS_CHROME = "chrome:headless --no-sandbox --disable-gpu --disable-de
 function resolveBrowser(options: ExecuteFixtureOptions): string {
   if (options.browser) return options.browser;
   if (process.env.E2E_BROWSER) return process.env.E2E_BROWSER;
-  if (options.headless === false || process.env.E2E_HEADFUL === "1") return "chrome";
+  if (options.headless === false || process.env.E2E_HEADFUL === "1")
+    return "chrome";
   return HEADLESS_CHROME;
 }
 
 // How long TestCafe waits for the browser to connect back. The default (2 min)
 // is too low when the dev server's event loop is busy compiling routes while
 // Chrome is starting; allow a generous default and an env override.
-const BROWSER_INIT_TIMEOUT = Number(process.env.E2E_BROWSER_INIT_TIMEOUT) || 300_000;
+const BROWSER_INIT_TIMEOUT =
+  Number(process.env.E2E_BROWSER_INIT_TIMEOUT) || 300_000;
 
 export async function executeFixture(
   fixture: TestFixtureDefinition,
@@ -68,7 +81,9 @@ export async function executeFixture(
       return null;
     }
   })();
-  const resultDetails: Record<string, unknown> = targetBaseUrl ? { targetBaseUrl } : {};
+  const resultDetails: Record<string, unknown> = targetBaseUrl
+    ? { targetBaseUrl }
+    : {};
 
   const logStream = new Writable({
     write(chunk, _encoding, callback) {
@@ -85,7 +100,11 @@ export async function executeFixture(
   let abortHandler: (() => void) | undefined;
   try {
     const runner = testcafe.createRunner();
-    abortHandler = () => { Promise.resolve(runner.stop()).catch(() => { /* suppress WebSocket close noise on cancel */ }); };
+    abortHandler = () => {
+      Promise.resolve(runner.stop()).catch(() => {
+        /* suppress WebSocket close noise on cancel */
+      });
+    };
     options.signal?.addEventListener("abort", abortHandler);
     const browser = resolveBrowser(options);
     const startedAt = Date.now();
@@ -128,13 +147,32 @@ export async function executeFixture(
 
     if (captured.length > 0) {
       // One result row per executed test (per run), mapped back to its case.
-      const titleToCaseId = new Map(cases.map((testCase) => [testCase.title, testCase.caseId]));
+      const titleToCaseId = new Map(
+        cases.map((testCase) => [testCase.title, testCase.caseId]),
+      );
       for (const test of captured) {
         const { title, runIndex } = parseTestName(test.name);
-        const caseId = titleToCaseId.get(title) ?? title;
-        const errorMessage = test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
+        const caseId = titleToCaseId.get(title);
+        // A title that doesn't map to a known case id can't be persisted (it would
+        // violate the test_results FK). Skip it with a warning rather than letting
+        // one stray row abort the whole fixture's insert and lose every result.
+        if (caseId == null) {
+          options.onLog?.(
+            `⚠ Could not map test "${test.name}" to a known case; result not stored.`,
+          );
+          continue;
+        }
+        const errorMessage =
+          test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
         results.push(
-          buildResult(caseId, test.failed ? "failed" : "passed", runIndex, test.durationMs, resultDetails, errorMessage),
+          buildResult(
+            caseId,
+            test.failed ? "failed" : "passed",
+            runIndex,
+            test.durationMs,
+            resultDetails,
+            errorMessage,
+          ),
         );
       }
     } else {
@@ -143,11 +181,21 @@ export async function executeFixture(
       const status = failedCount === 0 ? "passed" : "failed";
       const elapsed = Date.now() - startedAt;
       for (const testCase of cases) {
-        results.push(buildResult(testCase.caseId, status, null, elapsed, resultDetails, null));
+        results.push(
+          buildResult(
+            testCase.caseId,
+            status,
+            null,
+            elapsed,
+            resultDetails,
+            null,
+          ),
+        );
       }
     }
   } finally {
-    if (abortHandler) options.signal?.removeEventListener("abort", abortHandler);
+    if (abortHandler)
+      options.signal?.removeEventListener("abort", abortHandler);
     await testcafe.close();
     await rm(dir, { recursive: true, force: true });
   }
@@ -199,10 +247,15 @@ function createCaptureReporter(collector: CapturedTest[]) {
     return {
       reportTaskStart() {},
       reportFixtureStart() {},
-      reportTestDone(name: string, testRunInfo: { errs?: unknown[]; durationMs?: number }) {
+      reportTestDone(
+        name: string,
+        testRunInfo: { errs?: unknown[]; durationMs?: number },
+      ) {
         const host = this as unknown as ReporterHost;
         const rawErrs = Array.isArray(testRunInfo.errs) ? testRunInfo.errs : [];
-        const errs = rawErrs.map((err) => host.formatError(err).replace(ANSI_PATTERN, "").trimEnd());
+        const errs = rawErrs.map((err) =>
+          host.formatError(err).replace(ANSI_PATTERN, "").trimEnd(),
+        );
         collector.push({
           name,
           errs,
@@ -215,9 +268,17 @@ function createCaptureReporter(collector: CapturedTest[]) {
   };
 }
 
-/** "Some title (run 2)" → { title: "Some title", runIndex: 1 }. */
-function parseTestName(name: string): { title: string; runIndex: number | null } {
-  const match = /^(.*?)\s+\(run (\d+)\)$/.exec(name);
+// Reverses formatRunLabel():
+//   "Some title (run 2)"                 → { title: "Some title", runIndex: 1 }
+//   "Some title (run 2 — www.immoweb.be)" → { title: "Some title", runIndex: 1 }
+// The optional "— <label>" suffix (a per-run url's hostname) must be stripped so
+// the title still resolves back to its case id — otherwise the run label leaks
+// into the persisted case_id and violates the test_results FK constraint.
+function parseTestName(name: string): {
+  title: string;
+  runIndex: number | null;
+} {
+  const match = /^(.*?)\s+\(run (\d+)(?:\s+—\s+[^)]*)?\)$/.exec(name);
   if (match) return { title: match[1] ?? name, runIndex: Number(match[2]) - 1 };
   return { title: name, runIndex: null };
 }
@@ -237,9 +298,10 @@ async function persistResults(results: TestRunResult[]): Promise<void> {
   );
 }
 
-export async function loadFixtureWithCases(
-  fixtureId: string,
-): Promise<{ fixture: TestFixtureDefinition; cases: TestCaseDefinition[] } | null> {
+export async function loadFixtureWithCases(fixtureId: string): Promise<{
+  fixture: TestFixtureDefinition;
+  cases: TestCaseDefinition[];
+} | null> {
   const fixtureRow = await db.query.testFixtures.findFirst({
     where: eq(testFixtures.fixtureId, fixtureId),
     with: { suite: { with: { functionalRequirement: true } } },
@@ -250,7 +312,10 @@ export async function loadFixtureWithCases(
     where: eq(testCases.fixtureId, fixtureId),
   });
 
-  const fixture = mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl);
+  const fixture = mapFixtureRow(
+    fixtureRow,
+    fixtureRow.suite?.functionalRequirement?.baseUrl,
+  );
   const cases = caseRows.map(mapCaseRow);
 
   return { fixture, cases };
@@ -272,7 +337,10 @@ export interface RunPlan {
 type FixtureRow = typeof testFixtures.$inferSelect;
 type CaseRow = typeof testCases.$inferSelect;
 
-function mapFixtureRow(row: FixtureRow, frBaseUrl: string | null | undefined): TestFixtureDefinition {
+function mapFixtureRow(
+  row: FixtureRow,
+  frBaseUrl: string | null | undefined,
+): TestFixtureDefinition {
   return {
     fixtureId: row.fixtureId,
     suiteId: row.suiteId,
@@ -299,7 +367,9 @@ function mapCaseRow(row: CaseRow): TestCaseDefinition {
 }
 
 /** Build a one-fixture run plan. */
-export async function loadFixtureRunPlan(fixtureId: string): Promise<RunPlan | null> {
+export async function loadFixtureRunPlan(
+  fixtureId: string,
+): Promise<RunPlan | null> {
   const fixtureRow = await db.query.testFixtures.findFirst({
     where: eq(testFixtures.fixtureId, fixtureId),
     with: { suite: { with: { functionalRequirement: true } }, cases: true },
@@ -311,7 +381,10 @@ export async function loadFixtureRunPlan(fixtureId: string): Promise<RunPlan | n
     units: [
       {
         suiteTitle: fixtureRow.suite?.title ?? fixtureRow.suiteId,
-        fixture: mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl),
+        fixture: mapFixtureRow(
+          fixtureRow,
+          fixtureRow.suite?.functionalRequirement?.baseUrl,
+        ),
         cases: fixtureRow.cases.map(mapCaseRow),
       },
     ],
@@ -319,7 +392,9 @@ export async function loadFixtureRunPlan(fixtureId: string): Promise<RunPlan | n
 }
 
 /** Build a run plan covering every fixture in a suite. */
-export async function loadSuiteRunPlan(suiteId: string): Promise<RunPlan | null> {
+export async function loadSuiteRunPlan(
+  suiteId: string,
+): Promise<RunPlan | null> {
   const suiteRow = await db.query.testSuites.findFirst({
     where: eq(testSuites.suiteId, suiteId),
     with: { functionalRequirement: true, fixtures: { with: { cases: true } } },
@@ -361,12 +436,17 @@ export async function loadSelectionRunPlan(
     });
     if (!fixtureRow) continue;
 
-    const cases = fixtureRow.cases.filter((row) => caseIds.has(row.caseId)).map(mapCaseRow);
+    const cases = fixtureRow.cases
+      .filter((row) => caseIds.has(row.caseId))
+      .map(mapCaseRow);
     if (cases.length === 0) continue;
 
     units.push({
       suiteTitle: fixtureRow.suite?.title ?? fixtureRow.suiteId,
-      fixture: mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl),
+      fixture: mapFixtureRow(
+        fixtureRow,
+        fixtureRow.suite?.functionalRequirement?.baseUrl,
+      ),
       cases,
     });
   }
@@ -377,7 +457,9 @@ export async function loadSelectionRunPlan(
 }
 
 /** Build a run plan covering every fixture across every suite of a requirement. */
-export async function loadRequirementRunPlan(frId: string): Promise<RunPlan | null> {
+export async function loadRequirementRunPlan(
+  frId: string,
+): Promise<RunPlan | null> {
   const frRow = await db.query.functionalRequirements.findFirst({
     where: eq(functionalRequirements.id, frId),
     with: { suites: { with: { fixtures: { with: { cases: true } } } } },

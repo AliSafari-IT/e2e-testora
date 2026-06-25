@@ -49,6 +49,8 @@ interface RunContextValue {
   reports: ReportEntry[] | null;
   error: string | null;
   runId: string | null;
+  // Metadata about the active run: total number of TestCafe runs and a human label.
+  runMeta: { totalRuns: number; label: string } | null;
   startRun: (target: RunTarget) => Promise<void>;
   rerunFailed: () => Promise<void>;
   failedCaseCount: number;
@@ -57,7 +59,10 @@ interface RunContextValue {
 
 // Maps an id-based run scope to the request-body key the /api/run endpoint
 // expects. ("all" is handled separately — it carries no id.)
-const SCOPE_BODY_KEY: Record<"fixture" | "suite" | "requirement", "fixtureId" | "suiteId" | "frId"> = {
+const SCOPE_BODY_KEY: Record<
+  "fixture" | "suite" | "requirement",
+  "fixtureId" | "suiteId" | "frId"
+> = {
   fixture: "fixtureId",
   suite: "suiteId",
   requirement: "frId",
@@ -69,7 +74,9 @@ const SCOPE_BODY_KEY: Record<"fixture" | "suite" | "requirement", "fixtureId" | 
  * several of its runs failed. Entries missing ids (e.g. an older run) are
  * skipped so they never produce an unrunnable request.
  */
-function collectFailedCases(reports: ReportEntry[] | null): { fixtureId: string; caseId: string }[] {
+function collectFailedCases(
+  reports: ReportEntry[] | null,
+): { fixtureId: string; caseId: string }[] {
   if (!reports) return [];
   const seen = new Set<string>();
   const out: { fixtureId: string; caseId: string }[] = [];
@@ -105,12 +112,18 @@ const RUN_ENV_STORAGE_KEY = "e2e_active_run_environment";
 export function RunProvider({ children }: { children: React.ReactNode }) {
   const [selectedFixtureId, setSelectedFixtureId] = useState("");
   const [environment, setEnvironmentState] = useState<RunEnvironment>({});
-  const [runEnvironment, setRunEnvironment] = useState<RunEnvironment | null>(null);
+  const [runEnvironment, setRunEnvironment] = useState<RunEnvironment | null>(
+    null,
+  );
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [reports, setReports] = useState<ReportEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [runMeta, setRunMeta] = useState<{
+    totalRuns: number;
+    label: string;
+  } | null>(null);
   const esRef = useRef<EventSource | null>(null);
   // Guards the generic "connection closed" error that browsers fire right after
   // a normal stream completion, so it isn't mistaken for a stale/unknown run.
@@ -124,18 +137,32 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     setLogs([]);
     setReports(null);
     setError(null);
+    setRunMeta(null);
 
     const es = new EventSource(`/api/run/stream/${id}`);
     esRef.current = es;
 
     es.addEventListener("log", (event) => {
-      setLogs((prev) => [...prev, JSON.parse((event as MessageEvent<string>).data)]);
+      setLogs((prev) => [
+        ...prev,
+        JSON.parse((event as MessageEvent<string>).data),
+      ]);
+    });
+    es.addEventListener("meta", (event) => {
+      setRunMeta(JSON.parse((event as MessageEvent<string>).data));
     });
     es.addEventListener("done", (event) => {
       finishedRef.current = true;
       setReports(JSON.parse((event as MessageEvent<string>).data));
       setRunning(false);
       es.close();
+      // The run is over — drop the resume marker so a later reload doesn't try to
+      // re-attach to (and replay) a finished run.
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
     });
     es.addEventListener("error", (event) => {
       const message = (event as MessageEvent<string>).data;
@@ -148,6 +175,11 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         }
         setRunning(false);
         es.close();
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
         return;
       }
       // No payload + closed connection that never delivered a result means the
@@ -167,16 +199,15 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // On first mount, resume any run recorded before a reload.
+  // On first mount, resume any in-progress run. The server is the source of
+  // truth: ask it which run (if any) is active and re-attach to that. This
+  // recovers even when this client's localStorage is empty/stale (e.g. it was
+  // cleared, or the run was started from another tab/browser). localStorage is
+  // only a fast-path fallback when the server has no record (e.g. it restarted).
   useEffect(() => {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem(STORAGE_KEY);
-    } catch {
-      stored = null;
-    }
-    if (stored) {
-      attach(stored, { resuming: true });
+    let cancelled = false;
+
+    function restoreEnv() {
       try {
         const envRaw = localStorage.getItem(RUN_ENV_STORAGE_KEY);
         if (envRaw) setRunEnvironment(JSON.parse(envRaw));
@@ -184,7 +215,49 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         /* ignore */
       }
     }
-    return () => esRef.current?.close();
+
+    (async () => {
+      let activeId: string | null = null;
+      try {
+        const res = await fetch("/api/run");
+        if (res.ok) {
+          const data = await res.json();
+          activeId = data?.active?.runId ?? null;
+        }
+      } catch {
+        /* ignore network errors and fall back to localStorage */
+      }
+      if (cancelled) return;
+
+      if (activeId) {
+        try {
+          localStorage.setItem(STORAGE_KEY, activeId);
+        } catch {
+          /* ignore */
+        }
+        restoreEnv();
+        attach(activeId);
+        return;
+      }
+
+      // No server-side run. Try the locally recorded id (handles a server that
+      // restarted mid-run); attach() clears it if the server doesn't know it.
+      let stored: string | null = null;
+      try {
+        stored = localStorage.getItem(STORAGE_KEY);
+      } catch {
+        stored = null;
+      }
+      if (stored) {
+        restoreEnv();
+        attach(stored, { resuming: true });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      esRef.current?.close();
+    };
   }, [attach]);
 
   // Restore the chosen target environment.
@@ -217,7 +290,34 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     setRunning(false);
     setError("Run cancelled");
     setRunId(null);
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [runId]);
+
+  // Cancel whatever run the server currently has active, regardless of whether
+  // this client knows its id (it may not, right after a reload). Used to make
+  // room for a new run the user just requested. Unlike cancelRun, it stays
+  // quiet — no "Run cancelled" message — because a fresh run is about to start.
+  const cancelActiveRun = useCallback(async () => {
+    esRef.current?.close();
+    let id = runId;
+    if (!id) {
+      try {
+        const res = await fetch("/api/run");
+        if (res.ok) id = (await res.json())?.active?.runId ?? null;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!id) return;
+    try {
+      await fetch(`/api/run/${id}`, { method: "DELETE" });
+    } catch {
+      /* ignore */
+    }
   }, [runId]);
 
   // Shared launcher: POST a run request body, then attach to its stream.
@@ -229,7 +329,10 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       setLogs([]);
       // Attach the selected base scope so the same run can target local or
       // production without any change to the test content.
-      const envUsed: RunEnvironment = { baseUrl: environment.baseUrl, apiUrl: environment.apiUrl };
+      const envUsed: RunEnvironment = {
+        baseUrl: environment.baseUrl,
+        apiUrl: environment.apiUrl,
+      };
       setRunEnvironment(envUsed);
       try {
         localStorage.setItem(RUN_ENV_STORAGE_KEY, JSON.stringify(envUsed));
@@ -241,15 +344,31 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         ...(environment.baseUrl ? { baseUrl: environment.baseUrl } : {}),
         ...(environment.apiUrl ? { apiUrl: environment.apiUrl } : {}),
       };
-      try {
-        const res = await fetch("/api/run", {
+      const post = () =>
+        fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+      try {
+        let res = await post();
+        // A run is already in progress. Since the user explicitly asked to run
+        // something new, cancel the in-flight run and start theirs. (Only one
+        // TestCafe run can launch a browser at a time.)
+        if (res.status === 409) {
+          await cancelActiveRun();
+          // Give the previous run's browser a moment to tear down before the
+          // next one launches, then retry once.
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          res = await post();
+        }
         const data = await res.json();
         if (!res.ok) {
-          setError(typeof data.error === "string" ? data.error : JSON.stringify(data.error));
+          setError(
+            typeof data.error === "string"
+              ? data.error
+              : JSON.stringify(data.error),
+          );
           setRunning(false);
           return;
         }
@@ -264,7 +383,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         setRunning(false);
       }
     },
-    [attach, environment],
+    [attach, environment, cancelActiveRun],
   );
 
   const startRun = useCallback(
@@ -302,6 +421,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         reports,
         error,
         runId,
+        runMeta,
         startRun,
         rerunFailed,
         failedCaseCount,

@@ -1,10 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Check,
   Copy,
@@ -16,7 +23,11 @@ import {
   StopCircle,
   Terminal,
 } from "lucide-react";
-import { useRun, type RunScope, type RunEnvironment } from "@/components/run-provider";
+import {
+  useRun,
+  type RunScope,
+  type RunEnvironment,
+} from "@/components/run-provider";
 import { DomainBrandControl } from "@/components/run/domain-brand-control";
 import { hostFromUrl } from "@/lib/domain-logos";
 import { cn } from "@/lib/utils";
@@ -61,15 +72,26 @@ interface EnvPreset {
 
 // Preset URLs come from the environment so no app-specific deployment is baked
 // into the tool. The "Remote" preset only appears when its env vars are set.
-const LOCAL_BASE = process.env.NEXT_PUBLIC_WEBAPP_BASE_URL || "http://localhost:3233";
-const LOCAL_API = process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1";
+const LOCAL_BASE =
+  process.env.NEXT_PUBLIC_WEBAPP_BASE_URL || "http://localhost:3233";
+const LOCAL_API =
+  process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1";
 const REMOTE_BASE = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_BASE_URL || "";
 const REMOTE_API = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_API_URL || "";
 
 const ENV_PRESETS: EnvPreset[] = [
   { id: "default", label: "Default (seed)", baseUrl: "", apiUrl: "" },
   { id: "local", label: "Local", baseUrl: LOCAL_BASE, apiUrl: LOCAL_API },
-  ...(REMOTE_BASE ? [{ id: "remote", label: "Remote", baseUrl: REMOTE_BASE, apiUrl: REMOTE_API }] : []),
+  ...(REMOTE_BASE
+    ? [
+        {
+          id: "remote",
+          label: "Remote",
+          baseUrl: REMOTE_BASE,
+          apiUrl: REMOTE_API,
+        },
+      ]
+    : []),
   { id: "custom", label: "Custom…", baseUrl: "", apiUrl: "" },
 ];
 
@@ -111,7 +133,11 @@ function EnvBadge({ env }: { env: RunEnvironment | null }) {
   const web = isWebEnv(env);
   return (
     <span
-      title={env?.baseUrl ? `Site ${env.baseUrl}${env.apiUrl ? ` · API ${env.apiUrl}` : ""}` : "Seed-data URLs"}
+      title={
+        env?.baseUrl
+          ? `Site ${env.baseUrl}${env.apiUrl ? ` · API ${env.apiUrl}` : ""}`
+          : "Seed-data URLs"
+      }
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
         web
@@ -160,6 +186,7 @@ export function RunPanel() {
     logs,
     reports,
     error,
+    runMeta,
     startRun,
     rerunFailed,
     failedCaseCount,
@@ -173,18 +200,23 @@ export function RunPanel() {
   const [selectedRequirementId, setSelectedRequirementId] = useState("");
   const [copied, setCopied] = useState(false);
   const [seeding, setSeeding] = useState(false);
-  const [seedMessage, setSeedMessage] = useState<{ type: "success" | "error"; text: string } | null>(
-    null,
-  );
+  const [seedMessage, setSeedMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   // Re-fetch the three catalog lists (after mount, and after a re-seed) while
   // preserving the current selections.
   const refreshCatalog = useCallback(async () => {
     const [f, s, r] = await Promise.all([
-      fetch("/api/fixtures").then((res) => res.json() as Promise<FixtureSummary[]>),
+      fetch("/api/fixtures").then(
+        (res) => res.json() as Promise<FixtureSummary[]>,
+      ),
       fetch("/api/suites").then((res) => res.json() as Promise<SuiteSummary[]>),
-      fetch("/api/requirements").then((res) => res.json() as Promise<RequirementSummary[]>),
+      fetch("/api/requirements").then(
+        (res) => res.json() as Promise<RequirementSummary[]>,
+      ),
     ]);
     setFixtures(f);
     setSuites(s);
@@ -214,7 +246,10 @@ export function RunPanel() {
         text: `Tests updated — ${data.requirements} requirements, ${data.suites} suites, ${data.fixtures} fixtures, ${data.cases} cases.`,
       });
     } catch (err) {
-      setSeedMessage({ type: "error", text: err instanceof Error ? err.message : "Re-seed failed" });
+      setSeedMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Re-seed failed",
+      });
     } finally {
       setSeeding(false);
     }
@@ -244,14 +279,18 @@ export function RunPanel() {
     const preset = ENV_PRESETS.find((p) => p.id === id);
     if (!preset || id === "custom") return; // custom keeps the current URLs, edited inline
     setEnvironment(
-      preset.baseUrl || preset.apiUrl ? { baseUrl: preset.baseUrl, apiUrl: preset.apiUrl } : {},
+      preset.baseUrl || preset.apiUrl
+        ? { baseUrl: preset.baseUrl, apiUrl: preset.apiUrl }
+        : {},
     );
   }
 
   useEffect(() => {
     void refreshCatalog().then(({ f }) => {
       if (!selectedFixtureId) {
-        setSelectedFixtureId(searchParams.get("fixtureId") ?? f[0]?.fixtureId ?? "");
+        setSelectedFixtureId(
+          searchParams.get("fixtureId") ?? f[0]?.fixtureId ?? "",
+        );
       }
     });
     // Only needs to run once on mount to populate the dropdowns.
@@ -280,9 +319,49 @@ export function RunPanel() {
   const canRun = scope === "all" ? true : Boolean(selectedId);
   // Totals shown for the "all" scope.
   const allTotals = requirements.reduce(
-    (acc, r) => ({ fixtures: acc.fixtures + r.fixtureCount, cases: acc.cases + r.caseCount }),
+    (acc, r) => ({
+      fixtures: acc.fixtures + r.fixtureCount,
+      cases: acc.cases + r.caseCount,
+    }),
     { fixtures: 0, cases: 0 },
   );
+
+  const totalCases = useMemo(() => {
+    if (scope === "fixture")
+      return (
+        fixtures.find((f) => f.fixtureId === selectedFixtureId)?.caseCount ?? 0
+      );
+    if (scope === "suite")
+      return suites.find((s) => s.suiteId === selectedSuiteId)?.caseCount ?? 0;
+    if (scope === "requirement")
+      return (
+        requirements.find((r) => r.id === selectedRequirementId)?.caseCount ?? 0
+      );
+    return allTotals.cases;
+  }, [
+    scope,
+    selectedFixtureId,
+    selectedSuiteId,
+    selectedRequirementId,
+    fixtures,
+    suites,
+    requirements,
+    allTotals.cases,
+  ]);
+
+  const progressTotal = runMeta?.totalRuns ?? totalCases;
+
+  const completedCases = useMemo(() => {
+    // TestCafe marks completed tests with a leading √ or ×. A retried fixture can
+    // re-print lines, so never report more than the planned total.
+    const counted = logs.filter((line) => /^\s*[√×]/.test(line)).length;
+    return progressTotal > 0 ? Math.min(counted, progressTotal) : counted;
+  }, [logs, progressTotal]);
+
+  const progressPercent =
+    progressTotal > 0
+      ? Math.min(100, (completedCases / progressTotal) * 100)
+      : 0;
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
@@ -300,8 +379,9 @@ export function RunPanel() {
         <CardHeader>
           <CardTitle>Target environment</CardTitle>
           <CardDescription>
-            Point the run at a deployment — the same tests run against local or remote with no
-            change to their content. APIs use this base; UI smokes open it in the browser.
+            Point the run at a deployment — the same tests run against local or
+            remote with no change to their content. APIs use this base; UI
+            smokes open it in the browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -336,7 +416,10 @@ export function RunPanel() {
                   placeholder="https://app.example.com"
                   value={environment.baseUrl ?? ""}
                   onChange={(event) =>
-                    setEnvironment({ ...environment, baseUrl: event.target.value.trim() || undefined })
+                    setEnvironment({
+                      ...environment,
+                      baseUrl: event.target.value.trim() || undefined,
+                    })
                   }
                   disabled={running}
                 />
@@ -348,7 +431,10 @@ export function RunPanel() {
                   placeholder="https://api.example.com/api/v1"
                   value={environment.apiUrl ?? ""}
                   onChange={(event) =>
-                    setEnvironment({ ...environment, apiUrl: event.target.value.trim() || undefined })
+                    setEnvironment({
+                      ...environment,
+                      apiUrl: event.target.value.trim() || undefined,
+                    })
                   }
                   disabled={running}
                 />
@@ -357,7 +443,10 @@ export function RunPanel() {
           )}
 
           <div className="border-t border-border pt-3">
-            <DomainBrandControl host={hostFromUrl(environment.baseUrl) ?? "localhost"} disabled={running} />
+            <DomainBrandControl
+              host={hostFromUrl(environment.baseUrl) ?? "localhost"}
+              disabled={running}
+            />
           </div>
         </CardContent>
       </Card>
@@ -368,8 +457,8 @@ export function RunPanel() {
             <div>
               <CardTitle>Select what to run</CardTitle>
               <CardDescription>
-                Run a single fixture, or a whole suite / functional requirement to execute every
-                fixture beneath it with TestCafe.
+                Run a single fixture, or a whole suite / functional requirement
+                to execute every fixture beneath it with TestCafe.
               </CardDescription>
             </div>
             <Button
@@ -391,7 +480,9 @@ export function RunPanel() {
             <p
               className={cn(
                 "text-xs",
-                seedMessage.type === "error" ? "text-destructive" : "text-emerald-400",
+                seedMessage.type === "error"
+                  ? "text-destructive"
+                  : "text-emerald-400",
               )}
             >
               {seedMessage.text}
@@ -426,7 +517,9 @@ export function RunPanel() {
                 onChange={(event) => setSelectedFixtureId(event.target.value)}
                 disabled={running}
               >
-                {fixtures.length === 0 && <option value="">No fixtures available</option>}
+                {fixtures.length === 0 && (
+                  <option value="">No fixtures available</option>
+                )}
                 {fixtures.map((fixture) => (
                   <option key={fixture.fixtureId} value={fixture.fixtureId}>
                     {fixture.title} ({fixture.caseCount} cases)
@@ -442,10 +535,13 @@ export function RunPanel() {
                 onChange={(event) => setSelectedSuiteId(event.target.value)}
                 disabled={running}
               >
-                {suites.length === 0 && <option value="">No suites available</option>}
+                {suites.length === 0 && (
+                  <option value="">No suites available</option>
+                )}
                 {suites.map((suite) => (
                   <option key={suite.suiteId} value={suite.suiteId}>
-                    {suite.title} ({suite.fixtureCount} fixtures, {suite.caseCount} cases)
+                    {suite.title} ({suite.fixtureCount} fixtures,{" "}
+                    {suite.caseCount} cases)
                   </option>
                 ))}
               </select>
@@ -455,14 +551,19 @@ export function RunPanel() {
               <select
                 className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
                 value={selectedRequirementId}
-                onChange={(event) => setSelectedRequirementId(event.target.value)}
+                onChange={(event) =>
+                  setSelectedRequirementId(event.target.value)
+                }
                 disabled={running}
               >
-                {requirements.length === 0 && <option value="">No requirements available</option>}
+                {requirements.length === 0 && (
+                  <option value="">No requirements available</option>
+                )}
                 {requirements.map((requirement) => (
                   <option key={requirement.id} value={requirement.id}>
-                    {requirement.title} ({requirement.suiteCount} suites, {requirement.fixtureCount}{" "}
-                    fixtures, {requirement.caseCount} cases)
+                    {requirement.title} ({requirement.suiteCount} suites,{" "}
+                    {requirement.fixtureCount} fixtures, {requirement.caseCount}{" "}
+                    cases)
                   </option>
                 ))}
               </select>
@@ -470,13 +571,21 @@ export function RunPanel() {
 
             {scope === "all" && (
               <span className="text-sm text-muted-foreground">
-                Runs every functional requirement — {requirements.length} requirement(s),{" "}
-                {allTotals.fixtures} fixtures, {allTotals.cases} cases — against the selected target.
+                Runs every functional requirement — {requirements.length}{" "}
+                requirement(s), {allTotals.fixtures} fixtures, {allTotals.cases}{" "}
+                cases — against the selected target.
               </span>
             )}
 
-            <Button onClick={() => startRun({ scope, id: selectedId })} disabled={running || !canRun}>
-              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+            <Button
+              onClick={() => startRun({ scope, id: selectedId })}
+              disabled={running || !canRun}
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PlayCircle className="h-4 w-4" />
+              )}
               {running ? "Running..." : `Run ${scopeLabel}`}
             </Button>
             {running && (
@@ -491,8 +600,40 @@ export function RunPanel() {
               </span>
             )}
           </div>
+          {error && running && (
+            <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
         </CardContent>
       </Card>
+
+      {running && progressTotal > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+              Run progress
+            </CardTitle>
+            <CardDescription>
+              {completedCases} of {progressTotal} test runs completed
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Progress
+              value={completedCases}
+              max={progressTotal}
+              showLabel
+              variant="accent"
+              size="lg"
+            />
+            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Running {runMeta?.label ?? scopeLabel}</span>
+              <span>{Math.round(progressPercent)}%</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {(running || logs.length > 0) && (
         <Card>
@@ -505,20 +646,36 @@ export function RunPanel() {
                   <EnvBadge env={runEnvironment} />
                 </CardTitle>
                 <CardDescription>
-                  {running ? "TestCafe is running..." : "Output from the last run."}
+                  {running
+                    ? "TestCafe is running..."
+                    : "Output from the last run."}
                 </CardDescription>
               </div>
-              <Button size="sm" variant="outline" onClick={copyLogs} disabled={logs.length === 0}>
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={copyLogs}
+                disabled={logs.length === 0}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
                 {copied ? "Copied" : "Copy log"}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="max-h-80 overflow-y-auto rounded-md bg-black/60 p-3 font-mono text-xs leading-relaxed">
-              {logs.length === 0 && <p className="text-muted-foreground">Waiting for output...</p>}
+              {logs.length === 0 && (
+                <p className="text-muted-foreground">Waiting for output...</p>
+              )}
               {logs.map((line, index) => (
-                <div key={index} className={cn("whitespace-pre-wrap", logLineClassName(line))}>
+                <div
+                  key={index}
+                  className={cn("whitespace-pre-wrap", logLineClassName(line))}
+                >
                   {line}
                 </div>
               ))}
@@ -528,9 +685,11 @@ export function RunPanel() {
         </Card>
       )}
 
-      {error && (
+      {error && !running && (
         <Card>
-          <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
+          <CardContent className="p-5 text-sm text-destructive">
+            {error}
+          </CardContent>
         </Card>
       )}
 
@@ -547,7 +706,10 @@ export function RunPanel() {
                   {reports.length} result(s) ·{" "}
                   {reports.filter((r) => r.status === "passed").length} passed
                   {failedCaseCount > 0 && (
-                    <span className="text-destructive"> · {failedCaseCount} failed</span>
+                    <span className="text-destructive">
+                      {" "}
+                      · {failedCaseCount} failed
+                    </span>
                   )}
                 </CardDescription>
               </div>
@@ -576,11 +738,15 @@ export function RunPanel() {
                   key={`${report.fixtureId}-${report.caseId}-${index}`}
                   className={cn(
                     "flex items-center justify-between rounded-md border px-4 py-2",
-                    failed ? "border-destructive/40 bg-destructive/5" : "border-border",
+                    failed
+                      ? "border-destructive/40 bg-destructive/5"
+                      : "border-border",
                   )}
                 >
                   <span className="text-sm">{report.case}</span>
-                  <Badge variant={failed ? "destructive" : "success"}>{report.status}</Badge>
+                  <Badge variant={failed ? "destructive" : "success"}>
+                    {report.status}
+                  </Badge>
                 </div>
               );
             })}

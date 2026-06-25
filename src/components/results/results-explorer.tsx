@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Check, Copy, FileCode2, FileJson, Filter, Loader2, Trash2, X } from "lucide-react";
+import { Check, Copy, FileCode2, FileJson, Filter, Loader2, Trash2, X, AlertTriangle } from "lucide-react";
 import type { ReportResultRow } from "@/lib/queries";
 import { buildHtmlReport, buildJsonReport, dateStamp, summarize, type ReportBrand } from "@/lib/report";
 import { saveTextFile } from "@/lib/save-file";
@@ -68,6 +68,8 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
   const [errorRow, setErrorRow] = useState<ReportResultRow | null>(null);
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; row: ReportResultRow } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
 
   const frOptions = useMemo(() => distinct(rows, "frId", "frTitle"), [rows]);
@@ -201,29 +203,36 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
     }
   }
 
-  async function deleteIds(ids: string[], label: string) {
+  function deleteIds(ids: string[], label: string) {
     if (ids.length === 0) return;
-    if (!window.confirm(`Delete ${ids.length} ${label}? This cannot be undone.`)) return;
+    setConfirmDelete({ ids, label });
+  }
+
+  async function performDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
     try {
       const res = await fetch("/api/results", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids: confirmDelete.ids }),
       });
       if (!res.ok) {
-        window.alert("Failed to delete results.");
-        return;
+        throw new Error("Delete request failed");
       }
-      const removed = new Set(ids);
+      const removed = new Set(confirmDelete.ids);
       setRows((prev) => prev.filter((r) => !removed.has(r.id)));
       setSelected((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.delete(id));
+        confirmDelete.ids.forEach((id) => next.delete(id));
         return next;
       });
+      setConfirmDelete(null);
     } catch (err) {
       console.error("Delete failed", err);
       window.alert("Failed to delete results.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -634,6 +643,44 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
           <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-relaxed text-red-400">
             {errorRow?.errorMessage ?? ""}
           </pre>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation modal */}
+      <Dialog open={confirmDelete != null} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-red-500">
+              <AlertTriangle className="h-5 w-5" />
+              <DialogTitle>Delete {confirmDelete?.ids.length} {confirmDelete?.label}?</DialogTitle>
+            </div>
+            <DialogDescription>
+              This action cannot be undone. The selected results will be permanently removed from the database.
+            </DialogDescription>
+          </DialogHeader>
+
+          {confirmDelete && confirmDelete.label.includes("filtered") && hasFilters && (
+            <div className="rounded-md border border-border bg-muted/40 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Active filters</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {describeFilters().map((filter) => (
+                  <li key={filter} className="rounded-full bg-background px-2.5 py-1 text-xs text-foreground">
+                    {filter}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={performDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Delete
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
