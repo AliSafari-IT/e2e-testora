@@ -98,6 +98,8 @@ export const adminUsersApiFixture: TestFixtureDefinition = {
   title: "Users API — list, search, filters, create + lifecycle, access control",
   baseUrl: "/en/login",
   commonInput: {},
+  // Creates and soft-deletes real accounts — never run against a web deployment.
+  metadata: { destructive: true },
 };
 
 export const adminUsersUiFixture: TestFixtureDefinition = {
@@ -130,6 +132,8 @@ export const adminAgentsApiFixture: TestFixtureDefinition = {
   title: "Agents API — list scoped to role 'agent' + agent creation",
   baseUrl: "/en/login",
   commonInput: {},
+  // Creates and soft-deletes real agent accounts.
+  metadata: { destructive: true },
 };
 
 export const adminAgentsUiFixture: TestFixtureDefinition = {
@@ -146,6 +150,8 @@ export const adminCreditsApiFixture: TestFixtureDefinition = {
   title: "Credits API — assign, adjust, validation matrix + history",
   baseUrl: "/en/login",
   commonInput: {},
+  // Creates temp accounts and mutates their credit balances.
+  metadata: { destructive: true },
 };
 
 export const adminCreditsUiFixture: TestFixtureDefinition = {

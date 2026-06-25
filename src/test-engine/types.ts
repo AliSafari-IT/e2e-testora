@@ -22,6 +22,10 @@ export interface TestFixtureDefinition {
   commonInput: Record<string, unknown>;
   setupScript?: string;
   teardownScript?: string;
+  // Free-form flags carried from the DB. `destructive: true` marks a fixture
+  // that creates/mutates real data, so the runner can refuse to run it against
+  // a non-local (web) deployment.
+  metadata?: Record<string, unknown>;
 }
 
 export type ScriptType = "single" | "multi" | "scripted";

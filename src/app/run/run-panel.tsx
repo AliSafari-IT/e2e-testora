@@ -1,12 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Copy, Loader2, PlayCircle, RotateCcw, StopCircle, Terminal } from "lucide-react";
-import { useRun, type RunScope } from "@/components/run-provider";
+import {
+  Check,
+  Copy,
+  Database,
+  Globe,
+  Loader2,
+  PlayCircle,
+  RotateCcw,
+  StopCircle,
+  Terminal,
+} from "lucide-react";
+import { useRun, type RunScope, type RunEnvironment } from "@/components/run-provider";
 import { cn } from "@/lib/utils";
 
 interface FixtureSummary {
@@ -36,6 +46,75 @@ const SCOPE_TABS: { scope: RunScope; label: string }[] = [
   { scope: "requirement", label: "Functional requirement" },
 ];
 
+// The "base scope" — which deployment a run targets. Picked once; every run
+// (and rerun) follows it without touching any test content. "Default" sends no
+// override, so the URLs baked into the seed data (local dev) are used.
+interface EnvPreset {
+  id: string;
+  label: string;
+  baseUrl: string;
+  apiUrl: string;
+}
+
+const ENV_PRESETS: EnvPreset[] = [
+  { id: "default", label: "Default (seed)", baseUrl: "", apiUrl: "" },
+  { id: "local", label: "Local", baseUrl: "http://localhost:3233", apiUrl: "http://localhost:3234/api/v1" },
+  { id: "production", label: "Production", baseUrl: "https://immostory.ai", apiUrl: "https://api.immostory.ai/api/v1" },
+  { id: "custom", label: "Custom…", baseUrl: "", apiUrl: "" },
+];
+
+function isWebEnv(env: RunEnvironment | null): boolean {
+  if (!env?.baseUrl) return false;
+  try {
+    const host = new URL(env.baseUrl).hostname;
+    return !(
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host === "::1" ||
+      host.endsWith(".localhost")
+    );
+  } catch {
+    return true;
+  }
+}
+
+function environmentLabel(env: RunEnvironment | null): string {
+  if (!env || (!env.baseUrl && !env.apiUrl)) return "Default (seed)";
+  const preset = ENV_PRESETS.find(
+    (p) =>
+      p.id !== "default" &&
+      p.id !== "custom" &&
+      p.baseUrl === (env.baseUrl ?? "") &&
+      p.apiUrl === (env.apiUrl ?? ""),
+  );
+  if (preset) return preset.label;
+  try {
+    return new URL(env.baseUrl ?? "").host || "Custom";
+  } catch {
+    return "Custom";
+  }
+}
+
+/** A small pill showing which deployment a run targeted. */
+function EnvBadge({ env }: { env: RunEnvironment | null }) {
+  const web = isWebEnv(env);
+  return (
+    <span
+      title={env?.baseUrl ? `Site ${env.baseUrl}${env.apiUrl ? ` · API ${env.apiUrl}` : ""}` : "Seed-data URLs"}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
+        web
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+          : "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      <Globe className="h-3 w-3" />
+      {environmentLabel(env)}
+    </span>
+  );
+}
+
 // Colour a TestCafe console line by severity so failures stand out.
 function logLineClassName(line: string): string {
   const l = line.trim();
@@ -64,6 +143,9 @@ export function RunPanel() {
   const {
     selectedFixtureId,
     setSelectedFixtureId,
+    environment,
+    setEnvironment,
+    runEnvironment,
     running,
     logs,
     reports,
@@ -80,29 +162,88 @@ export function RunPanel() {
   const [selectedSuiteId, setSelectedSuiteId] = useState("");
   const [selectedRequirementId, setSelectedRequirementId] = useState("");
   const [copied, setCopied] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<{ type: "success" | "error"; text: string } | null>(
+    null,
+  );
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  // Re-fetch the three catalog lists (after mount, and after a re-seed) while
+  // preserving the current selections.
+  const refreshCatalog = useCallback(async () => {
+    const [f, s, r] = await Promise.all([
+      fetch("/api/fixtures").then((res) => res.json() as Promise<FixtureSummary[]>),
+      fetch("/api/suites").then((res) => res.json() as Promise<SuiteSummary[]>),
+      fetch("/api/requirements").then((res) => res.json() as Promise<RequirementSummary[]>),
+    ]);
+    setFixtures(f);
+    setSuites(s);
+    setRequirements(r);
+    setSelectedSuiteId((current) => current || s[0]?.suiteId || "");
+    setSelectedRequirementId((current) => current || r[0]?.id || "");
+    return { f, s, r };
+  }, []);
+
+  async function reseed() {
+    setSeeding(true);
+    setSeedMessage(null);
+    try {
+      const res = await fetch("/api/seed", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setSeedMessage({
+          type: "error",
+          text: typeof data.error === "string" ? data.error : "Re-seed failed",
+        });
+        return;
+      }
+      const { f } = await refreshCatalog();
+      if (!selectedFixtureId && f[0]) setSelectedFixtureId(f[0].fixtureId);
+      setSeedMessage({
+        type: "success",
+        text: `Tests updated — ${data.requirements} requirements, ${data.suites} suites, ${data.fixtures} fixtures, ${data.cases} cases.`,
+      });
+    } catch (err) {
+      setSeedMessage({ type: "error", text: err instanceof Error ? err.message : "Re-seed failed" });
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  // Which environment preset the dropdown shows. Reconciled with the persisted
+  // environment (restored asynchronously by the provider) so a reload reflects
+  // the last choice; "custom" when the stored URLs don't match a known preset.
+  const [envPresetId, setEnvPresetId] = useState<string>("default");
+
   useEffect(() => {
-    fetch("/api/fixtures")
-      .then((res) => res.json())
-      .then((data: FixtureSummary[]) => {
-        setFixtures(data);
-        if (!selectedFixtureId) {
-          setSelectedFixtureId(searchParams.get("fixtureId") ?? data[0]?.fixtureId ?? "");
-        }
-      });
-    fetch("/api/suites")
-      .then((res) => res.json())
-      .then((data: SuiteSummary[]) => {
-        setSuites(data);
-        setSelectedSuiteId((current) => current || data[0]?.suiteId || "");
-      });
-    fetch("/api/requirements")
-      .then((res) => res.json())
-      .then((data: RequirementSummary[]) => {
-        setRequirements(data);
-        setSelectedRequirementId((current) => current || data[0]?.id || "");
-      });
+    setEnvPresetId((current) => {
+      if (current === "custom") return current; // don't disrupt active custom editing
+      const match = ENV_PRESETS.find(
+        (preset) =>
+          preset.id !== "custom" &&
+          preset.baseUrl === (environment.baseUrl ?? "") &&
+          preset.apiUrl === (environment.apiUrl ?? ""),
+      );
+      if (match) return match.id;
+      return environment.baseUrl || environment.apiUrl ? "custom" : "default";
+    });
+  }, [environment]);
+
+  function applyPreset(id: string) {
+    setEnvPresetId(id);
+    const preset = ENV_PRESETS.find((p) => p.id === id);
+    if (!preset || id === "custom") return; // custom keeps the current URLs, edited inline
+    setEnvironment(
+      preset.baseUrl || preset.apiUrl ? { baseUrl: preset.baseUrl, apiUrl: preset.apiUrl } : {},
+    );
+  }
+
+  useEffect(() => {
+    void refreshCatalog().then(({ f }) => {
+      if (!selectedFixtureId) {
+        setSelectedFixtureId(searchParams.get("fixtureId") ?? f[0]?.fixtureId ?? "");
+      }
+    });
     // Only needs to run once on mount to populate the dropdowns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -127,11 +268,101 @@ export function RunPanel() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Select what to run</CardTitle>
+          <CardTitle>Target environment</CardTitle>
           <CardDescription>
-            Run a single fixture, or a whole suite / functional requirement to execute every fixture
-            beneath it with TestCafe.
+            Point the run at a deployment — the same tests run against local or production with no
+            change to their content. APIs use this base; UI smokes open it in the browser.
           </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
+              value={envPresetId}
+              onChange={(event) => applyPreset(event.target.value)}
+              disabled={running}
+            >
+              {ENV_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+            {envPresetId !== "custom" && (
+              <span className="text-xs text-muted-foreground">
+                {environment.baseUrl
+                  ? `Site ${environment.baseUrl} · API ${environment.apiUrl}`
+                  : "Using the URLs from the seed data."}
+              </span>
+            )}
+          </div>
+
+          {envPresetId === "custom" && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                Site base URL
+                <input
+                  className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                  placeholder="https://immostory.ai"
+                  value={environment.baseUrl ?? ""}
+                  onChange={(event) =>
+                    setEnvironment({ ...environment, baseUrl: event.target.value.trim() || undefined })
+                  }
+                  disabled={running}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                API base URL
+                <input
+                  className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                  placeholder="https://api.immostory.ai/api/v1"
+                  value={environment.apiUrl ?? ""}
+                  onChange={(event) =>
+                    setEnvironment({ ...environment, apiUrl: event.target.value.trim() || undefined })
+                  }
+                  disabled={running}
+                />
+              </label>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Select what to run</CardTitle>
+              <CardDescription>
+                Run a single fixture, or a whole suite / functional requirement to execute every
+                fixture beneath it with TestCafe.
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void reseed()}
+              disabled={running || seeding}
+              title="Re-seed the catalog from the test definitions (adds new tests, updates changed ones)"
+            >
+              {seeding ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Database className="h-4 w-4" />
+              )}
+              {seeding ? "Updating..." : "Update tests"}
+            </Button>
+          </div>
+          {seedMessage && (
+            <p
+              className={cn(
+                "text-xs",
+                seedMessage.type === "error" ? "text-destructive" : "text-emerald-400",
+              )}
+            >
+              {seedMessage.text}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/40 p-1">
@@ -230,6 +461,7 @@ export function RunPanel() {
                 <CardTitle className="flex items-center gap-2">
                   <Terminal className="h-4 w-4" />
                   Live console
+                  <EnvBadge env={runEnvironment} />
                 </CardTitle>
                 <CardDescription>
                   {running ? "TestCafe is running..." : "Output from the last run."}
@@ -266,7 +498,10 @@ export function RunPanel() {
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle>Run results</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Run results
+                  <EnvBadge env={runEnvironment} />
+                </CardTitle>
                 <CardDescription>
                   {reports.length} result(s) ·{" "}
                   {reports.filter((r) => r.status === "passed").length} passed

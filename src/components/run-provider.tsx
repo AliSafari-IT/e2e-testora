@@ -28,9 +28,21 @@ export interface RunTarget {
   id: string;
 }
 
+// The "base scope" for a run: which deployment the tests target. Empty fields
+// fall back to whatever the seed data hardcodes (local dev).
+export interface RunEnvironment {
+  baseUrl?: string;
+  apiUrl?: string;
+}
+
 interface RunContextValue {
   selectedFixtureId: string;
   setSelectedFixtureId: (id: string) => void;
+  environment: RunEnvironment;
+  setEnvironment: (env: RunEnvironment) => void;
+  // The environment the currently displayed run was launched with (may differ
+  // from `environment` if the user changed the selector after starting).
+  runEnvironment: RunEnvironment | null;
   running: boolean;
   logs: string[];
   reports: ReportEntry[] | null;
@@ -75,6 +87,11 @@ const RunContext = createContext<RunContextValue | null>(null);
 // Persist the active run id so a full page reload can re-attach to the same
 // server-side run (the stream replays its full log + final result on connect).
 const STORAGE_KEY = "e2e_active_run";
+// Persist the chosen target environment across reloads.
+const ENV_STORAGE_KEY = "e2e_run_environment";
+// Persist the environment a run was launched with, so a resumed run still shows
+// the correct target badge after a reload.
+const RUN_ENV_STORAGE_KEY = "e2e_active_run_environment";
 
 /**
  * Holds the run state and the live SSE connection. It lives in the root layout,
@@ -85,6 +102,8 @@ const STORAGE_KEY = "e2e_active_run";
  */
 export function RunProvider({ children }: { children: React.ReactNode }) {
   const [selectedFixtureId, setSelectedFixtureId] = useState("");
+  const [environment, setEnvironmentState] = useState<RunEnvironment>({});
+  const [runEnvironment, setRunEnvironment] = useState<RunEnvironment | null>(null);
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [reports, setReports] = useState<ReportEntry[] | null>(null);
@@ -154,9 +173,36 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     } catch {
       stored = null;
     }
-    if (stored) attach(stored, { resuming: true });
+    if (stored) {
+      attach(stored, { resuming: true });
+      try {
+        const envRaw = localStorage.getItem(RUN_ENV_STORAGE_KEY);
+        if (envRaw) setRunEnvironment(JSON.parse(envRaw));
+      } catch {
+        /* ignore */
+      }
+    }
     return () => esRef.current?.close();
   }, [attach]);
+
+  // Restore the chosen target environment.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ENV_STORAGE_KEY);
+      if (raw) setEnvironmentState(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setEnvironment = useCallback((env: RunEnvironment) => {
+    setEnvironmentState(env);
+    try {
+      localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(env));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const cancelRun = useCallback(async () => {
     if (!runId) return;
@@ -179,11 +225,25 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setReports(null);
       setLogs([]);
+      // Attach the selected base scope so the same run can target local or
+      // production without any change to the test content.
+      const envUsed: RunEnvironment = { baseUrl: environment.baseUrl, apiUrl: environment.apiUrl };
+      setRunEnvironment(envUsed);
+      try {
+        localStorage.setItem(RUN_ENV_STORAGE_KEY, JSON.stringify(envUsed));
+      } catch {
+        /* ignore */
+      }
+      const payload = {
+        ...body,
+        ...(environment.baseUrl ? { baseUrl: environment.baseUrl } : {}),
+        ...(environment.apiUrl ? { apiUrl: environment.apiUrl } : {}),
+      };
       try {
         const res = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -202,7 +262,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         setRunning(false);
       }
     },
-    [attach],
+    [attach, environment],
   );
 
   const startRun = useCallback(
@@ -228,6 +288,9 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       value={{
         selectedFixtureId,
         setSelectedFixtureId,
+        environment,
+        setEnvironment,
+        runEnvironment,
         running,
         logs,
         reports,

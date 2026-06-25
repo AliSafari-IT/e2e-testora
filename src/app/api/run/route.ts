@@ -27,6 +27,58 @@ const requestSchema = z.union([
   }),
 ]);
 
+// Optional per-run "base scope" — point the whole run at a different frontend
+// origin and/or API base (local vs. production vs. …) without editing any test
+// content. `baseUrl` retargets every fixture's page origin; `apiUrl` is exposed
+// to the scripts' t.request calls (they already read process.env.IMMOSTORY_API_URL).
+const envSchema = z.object({
+  baseUrl: z.string().url().optional(),
+  apiUrl: z.string().url().optional(),
+});
+
+type RunUnit = RunPlan["units"][number];
+
+/** Swap a resolved URL's origin for the override's, keeping path/query/hash. */
+function retargetOrigin(url: string | undefined, overrideBase: string): string | undefined {
+  if (!url) return url;
+  try {
+    const origin = new URL(overrideBase).origin;
+    if (url.startsWith("/")) return origin + url;
+    const u = new URL(url);
+    return origin + u.pathname + u.search + u.hash;
+  } catch {
+    return url;
+  }
+}
+
+function retargetUnit(unit: RunUnit, baseUrl: string): RunUnit {
+  return {
+    ...unit,
+    fixture: { ...unit.fixture, baseUrl: retargetOrigin(unit.fixture.baseUrl, baseUrl) },
+  };
+}
+
+/** A web (non-local) target — anything that isn't clearly localhost. */
+function isWebTarget(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false; // no override = the seed's local URLs
+  try {
+    const host = new URL(baseUrl).hostname;
+    const local =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      host === "::1" ||
+      host.endsWith(".localhost");
+    return !local;
+  } catch {
+    return true; // unparseable → treat as web, the safer default
+  }
+}
+
+function isDestructive(unit: RunUnit): boolean {
+  return unit.fixture.metadata?.destructive === true;
+}
+
 export async function POST(request: Request) {
   const body = await request.json();
   const parsed = requestSchema.safeParse(body);
@@ -57,26 +109,70 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Run target not found" }, { status: 404 });
   }
 
-  const runnableUnits = plan.units.filter((unit) => unit.cases.length > 0);
+  let runnableUnits = plan.units.filter((unit) => unit.cases.length > 0);
   if (runnableUnits.length === 0) {
     return NextResponse.json({ error: "No test cases to run for this selection" }, { status: 400 });
   }
 
+  const env = envSchema.safeParse(body);
+  const baseUrl = env.success ? env.data.baseUrl : undefined;
+  const apiUrl = env.success ? env.data.apiUrl : undefined;
+  if (baseUrl) runnableUnits = runnableUnits.map((unit) => retargetUnit(unit, baseUrl));
+
+  // Guard rail: destructive fixtures (create/delete accounts, mutate credits)
+  // must never run against a web deployment — only local.
+  let skippedDestructive: string[] = [];
+  if (isWebTarget(baseUrl)) {
+    skippedDestructive = runnableUnits.filter(isDestructive).map((unit) => unit.fixture.title);
+    runnableUnits = runnableUnits.filter((unit) => !isDestructive(unit));
+    if (runnableUnits.length === 0) {
+      return NextResponse.json(
+        {
+          error: `Blocked: this run only contains data-mutating fixtures (${skippedDestructive.join(
+            ", ",
+          )}), which can't run against a web domain (${baseUrl}). Switch the target to Local.`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const runId = randomUUID();
   createRun(runId);
+  if (skippedDestructive.length > 0) {
+    appendLog(
+      runId,
+      `⚠ Skipped ${skippedDestructive.length} data-mutating fixture(s) on a web target (${baseUrl}): ${skippedDestructive.join(", ")}`,
+    );
+  }
 
-  void runInBackground(runId, { ...plan, units: runnableUnits });
+  void runInBackground(runId, { ...plan, units: runnableUnits }, { baseUrl, apiUrl });
 
   return NextResponse.json({ runId }, { status: 202 });
 }
 
-async function runInBackground(runId: string, plan: RunPlan): Promise<void> {
+async function runInBackground(
+  runId: string,
+  plan: RunPlan,
+  env: { baseUrl?: string; apiUrl?: string },
+): Promise<void> {
+  // Scope the API base for this run only — the scripts read it from the
+  // environment. Single-run is enforced upstream, so this can't race.
+  const previousApiUrl = process.env.IMMOSTORY_API_URL;
+  if (env.apiUrl) process.env.IMMOSTORY_API_URL = env.apiUrl;
+
   try {
     const totalCases = plan.units.reduce((total, unit) => total + unit.cases.length, 0);
     appendLog(
       runId,
       `Starting run for ${plan.label} — ${plan.units.length} fixture(s), ${totalCases} case(s)...`,
     );
+    if (env.baseUrl || env.apiUrl) {
+      appendLog(
+        runId,
+        `Target: site ${env.baseUrl ?? "(default)"}${env.apiUrl ? `, API ${env.apiUrl}` : ""}`,
+      );
+    }
 
     const run = getRun(runId);
     const signal = run?.abortController.signal;
@@ -105,6 +201,11 @@ async function runInBackground(runId: string, plan: RunPlan): Promise<void> {
     const run = getRun(runId);
     if (!run?.done) {
       failRun(runId, error instanceof Error ? error.message : "Run failed");
+    }
+  } finally {
+    if (env.apiUrl) {
+      if (previousApiUrl === undefined) delete process.env.IMMOSTORY_API_URL;
+      else process.env.IMMOSTORY_API_URL = previousApiUrl;
     }
   }
 }

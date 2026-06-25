@@ -269,6 +269,7 @@ function mapFixtureRow(row: FixtureRow, frBaseUrl: string | null | undefined): T
     commonInput: row.commonInput ?? {},
     setupScript: row.setupScript ?? undefined,
     teardownScript: row.teardownScript ?? undefined,
+    metadata: row.metadata ?? undefined,
   };
 }
 
