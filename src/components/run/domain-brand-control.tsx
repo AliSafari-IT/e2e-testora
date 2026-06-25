@@ -10,7 +10,7 @@ import {
   setDomainBrand,
 } from "@/lib/domain-logos";
 
-/** "ImmoStory AI, a product of Probex.be" from whatever names are present. */
+/** "Acme App, a product of Acme Inc." from whatever names are present. */
 function brandCaption(brand: DomainBrand): string {
   const product = brand.productName?.trim();
   const company = brand.companyName?.trim();
@@ -66,7 +66,7 @@ export function DomainBrandControl({ host, disabled }: { host: string; disabled?
 
       <BrandRow
         label="Product"
-        namePlaceholder="ImmoStory AI"
+        namePlaceholder="e.g. Acme App"
         name={brand.productName ?? ""}
         logo={brand.productLogo}
         busy={busy === "product"}
@@ -77,7 +77,7 @@ export function DomainBrandControl({ host, disabled }: { host: string; disabled?
       />
       <BrandRow
         label="Company"
-        namePlaceholder="Probex.be"
+        namePlaceholder="e.g. Acme Inc."
         name={brand.companyName ?? ""}
         logo={brand.companyLogo}
         busy={busy === "company"}

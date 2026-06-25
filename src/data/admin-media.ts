@@ -18,7 +18,7 @@ export const mediaAssetsFR: FunctionalRequirementDefinition = {
   title: "Admin · Media & Style Assets",
   description:
     "Site content, media libraries and render-style assets: homepage sections, testimonials, logos, FAQ, listings, videos, music, voices and style templates.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 const pages: AdminPageSpec[] = [

@@ -1,7 +1,7 @@
 // Per-domain branding, set on the Run page and embedded into exported HTML/PDF
 // reports. Each domain (host) can carry a product (name + logo) and the company
-// behind it (name + logo), so a report reads e.g. "ImmoStory AI, a product of
-// Probex.be". Stored in localStorage; logos are data URLs so the export is
+// behind it (name + logo), so a report reads e.g. "Acme App, a product of
+// Acme Inc.". Stored in localStorage; logos are data URLs so the export is
 // fully self-contained.
 
 export interface DomainBrand {

@@ -8,7 +8,7 @@ import type {
 /**
  * Supported listing-site scraping coverage.
  *
- * ImmoStory routes every supported domain to its own dedicated extractor and a
+ * The app under test routes every supported domain to its own dedicated extractor and a
  * provider strategy (residential proxy, BrightData, Firecrawl, …). Driving the
  * full browser video wizard once per site would be slow and brittle, so these
  * fixtures exercise the scraping layer directly through the backend API using
@@ -27,7 +27,7 @@ import type {
  *    not just that routing is wired up.
  *
  * Both fixtures authenticate via /auth/login with t.request (the scraper
- * endpoints are JWT-guarded); the password comes from IMMOSTORY_PASSWORD.
+ * endpoints are JWT-guarded); the password comes from WEBAPP_PASSWORD.
  */
 
 const API_DEFAULT = "http://localhost:3234/api/v1";
@@ -49,7 +49,7 @@ const LOGIN_SNIPPET = [
   "  let last = 0;",
   "  for (let i = 0; i < 4; i++) {",
   "    const login = await t.request.post(api + '/auth/login', {",
-  "      body: { email: 'asafarim@gmail.com', password: process.env.IMMOSTORY_PASSWORD || '' },",
+  "      body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: process.env.WEBAPP_PASSWORD || '' },",
   "    });",
   "    last = login.status;",
   "    if (login.status === 200) { globalThis.__e2eToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
@@ -93,7 +93,7 @@ export const listingScrapingFR: FunctionalRequirementDefinition = {
   title: "Listing site scraping",
   description:
     "Each supported real-estate domain routes to its own extractor and a working provider strategy.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 export const scraperSitesSuite: TestSuiteDefinition = {
@@ -125,7 +125,7 @@ export const scraperLiveFixture: TestFixtureDefinition = {
 // One representative URL per supported source. The path segments are
 // placeholders — /scraper/simulate only inspects the hostname to choose the
 // extractor, it does not fetch the page. Expected sources are the values
-// ImmoStory's getSiteCategory() returns for each host.
+// the app's getSiteCategory() returns for each host.
 const ROUTING_SITES: { url: string; expectedSource: string }[] = [
   {
     url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/x/1000/1",

@@ -7,6 +7,7 @@ import {
   loadSuiteRunPlan,
   loadRequirementRunPlan,
   loadSelectionRunPlan,
+  loadAllRunPlan,
   type RunPlan,
 } from "@/test-engine/executors/testExecutor";
 import { toJsonReport } from "@/test-engine/formatters/resultFormatter";
@@ -14,12 +15,13 @@ import { createRun, appendLog, completeRun, failRun, getRun, hasActiveRun } from
 import type { FormattedReport } from "@/test-engine/types";
 
 // A run can be scoped to a single fixture, a whole suite, a whole functional
-// requirement (every fixture beneath it), or an explicit set of cases (the
-// basis for "rerun failed"). Exactly one shape is given.
+// requirement (every fixture beneath it), every requirement at once, or an
+// explicit set of cases (the basis for "rerun failed"). Exactly one shape is given.
 const requestSchema = z.union([
   z.object({ fixtureId: z.string().min(1) }),
   z.object({ suiteId: z.string().min(1) }),
   z.object({ frId: z.string().min(1) }),
+  z.object({ all: z.literal(true) }),
   z.object({
     cases: z
       .array(z.object({ fixtureId: z.string().min(1), caseId: z.string().min(1) }))
@@ -30,7 +32,7 @@ const requestSchema = z.union([
 // Optional per-run "base scope" — point the whole run at a different frontend
 // origin and/or API base (local vs. production vs. …) without editing any test
 // content. `baseUrl` retargets every fixture's page origin; `apiUrl` is exposed
-// to the scripts' t.request calls (they already read process.env.IMMOSTORY_API_URL).
+// to the scripts' t.request calls (they already read process.env.WEBAPP_API_URL).
 const envSchema = z.object({
   baseUrl: z.string().url().optional(),
   apiUrl: z.string().url().optional(),
@@ -97,13 +99,15 @@ export async function POST(request: Request) {
 
   const data = parsed.data;
   const plan =
-    "fixtureId" in data
-      ? await loadFixtureRunPlan(data.fixtureId)
-      : "suiteId" in data
-        ? await loadSuiteRunPlan(data.suiteId)
-        : "frId" in data
-          ? await loadRequirementRunPlan(data.frId)
-          : await loadSelectionRunPlan(data.cases);
+    "all" in data
+      ? await loadAllRunPlan()
+      : "fixtureId" in data
+        ? await loadFixtureRunPlan(data.fixtureId)
+        : "suiteId" in data
+          ? await loadSuiteRunPlan(data.suiteId)
+          : "frId" in data
+            ? await loadRequirementRunPlan(data.frId)
+            : await loadSelectionRunPlan(data.cases);
 
   if (!plan) {
     return NextResponse.json({ error: "Run target not found" }, { status: 404 });
@@ -158,8 +162,8 @@ async function runInBackground(
 ): Promise<void> {
   // Scope the API base for this run only — the scripts read it from the
   // environment. Single-run is enforced upstream, so this can't race.
-  const previousApiUrl = process.env.IMMOSTORY_API_URL;
-  if (env.apiUrl) process.env.IMMOSTORY_API_URL = env.apiUrl;
+  const previousApiUrl = process.env.WEBAPP_API_URL;
+  if (env.apiUrl) process.env.WEBAPP_API_URL = env.apiUrl;
 
   try {
     const totalCases = plan.units.reduce((total, unit) => total + unit.cases.length, 0);
@@ -204,8 +208,8 @@ async function runInBackground(
     }
   } finally {
     if (env.apiUrl) {
-      if (previousApiUrl === undefined) delete process.env.IMMOSTORY_API_URL;
-      else process.env.IMMOSTORY_API_URL = previousApiUrl;
+      if (previousApiUrl === undefined) delete process.env.WEBAPP_API_URL;
+      else process.env.WEBAPP_API_URL = previousApiUrl;
     }
   }
 }

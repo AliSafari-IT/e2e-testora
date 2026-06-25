@@ -88,7 +88,7 @@ export function RequirementForm({ mode = "create", initial, onSuccess }: Require
         </Label>
         <Input
           id="fr-base-url"
-          placeholder="http://localhost:3233 or https://immostory.ai"
+          placeholder="http://localhost:3233 or https://app.example.com"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
         />

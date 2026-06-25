@@ -5,7 +5,7 @@ import type {
 } from "@/test-engine/types";
 
 /**
- * Shared building blocks for the ImmoStory admin-console test suites.
+ * Shared building blocks for the admin-console test suites of the app under test.
  *
  * The admin area is organised into four chapters (mirroring the app's own
  * sidebar groups in admin-menu.config.ts): Accounts & Billing, Media & Style
@@ -30,20 +30,20 @@ export const API_DEFAULT = "http://localhost:3234/api/v1";
 // credentials, logs in once (cached), and exposes auth* request helpers. The
 // `typeof run` guards keep it valid whether or not the case has runs[].
 export const ADMIN_HELPERS = [
-  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.IMMOSTORY_API_URL || '" + API_DEFAULT + "');",
-  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
+  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.WEBAPP_API_URL || '" + API_DEFAULT + "');",
+  "const ADMIN_EMAIL = process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com';",
   "async function getToken() {",
   "  const cached = globalThis.__e2eAdminToken;",
   "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
   "  let last = 0;",
   "  for (let i = 0; i < 4; i++) {",
-  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.IMMOSTORY_PASSWORD || '' } });",
+  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.WEBAPP_PASSWORD || '' } });",
   "    last = login.status;",
   "    if (login.status === 200) { globalThis.__e2eAdminToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
   "    if (login.status === 429) { await t.wait(15000); continue; }",
   "    break;",
   "  }",
-  "  throw new Error('admin login did not succeed (last status ' + last + '). Check IMMOSTORY_PASSWORD and that the account exists.');",
+  "  throw new Error('admin login did not succeed (last status ' + last + '). Check WEBAPP_PASSWORD and that the account exists.');",
   "}",
   "async function authReq(method, path, body) {",
   "  const tok = await getToken();",
@@ -56,7 +56,9 @@ export const ADMIN_HELPERS = [
   "const authPut = (p, b) => authReq('put', p, b === undefined ? {} : b);",
   "const authPatch = (p, b) => authReq('patch', p, b === undefined ? {} : b);",
   "const authDelete = (p) => authReq('delete', p);",
-  "function uniqueEmail() { return 'asafarim+e2eadmin' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@gmail.com'; }",
+  // Plus-address the configured admin email so temp accounts are re-runnable
+  // and land in an inbox you control (works with Gmail-style + addressing).
+  "function uniqueEmail() { var base = process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'; var at = base.indexOf('@'); var local = at > -1 ? base.slice(0, at) : base; var domain = at > -1 ? base.slice(at + 1) : 'example.com'; return local + '+e2e' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@' + domain; }",
   "async function createTempUser(role) {",
   "  const email = uniqueEmail();",
   "  const res = await authPost('/admin/users', { email, password: 'TestPass123!', role: role || 'user' });",
@@ -84,14 +86,14 @@ export function apiScript(body: string): string {
 
 // Hydration-gated browser login as the admin account, reused by every UI smoke.
 export const BROWSER_ADMIN_LOGIN = [
-  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
+  "const ADMIN_EMAIL = process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com';",
   "await t.navigateTo('/en/login');",
   "const emailInput = Selector('[data-testid=\"login-email\"]');",
   "await t.expect(emailInput.with({ timeout: 30000 }).exists).ok('login form did not render');",
   "const passwordInput = Selector('[data-testid=\"login-password\"]');",
   "const submitButton = Selector('[data-testid=\"login-submit\"]');",
   "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
-  "const password = process.env.IMMOSTORY_PASSWORD || '';",
+  "const password = process.env.WEBAPP_PASSWORD || '';",
   "for (let i = 0; i < 4; i++) {",
   "  await t.typeText(emailInput, ADMIN_EMAIL, { replace: true });",
   "  await t.typeText(passwordInput, password, { replace: true });",
@@ -110,7 +112,7 @@ export const BROWSER_ADMIN_LOGIN = [
   "  if (p.indexOf('/login') === -1) { loggedIn = true; break; }",
   "  await t.wait(1000);",
   "}",
-  "await t.expect(loggedIn).ok('admin login did not complete (still on /login) — check IMMOSTORY_PASSWORD / that the account exists.');",
+  "await t.expect(loggedIn).ok('admin login did not complete (still on /login) — check WEBAPP_PASSWORD / that the account exists.');",
   "await t.wait(1500);",
   "",
 ].join("\n");

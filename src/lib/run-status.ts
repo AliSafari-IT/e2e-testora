@@ -42,7 +42,7 @@ export function singleResult(result: LastResult | undefined): AggregateResult | 
   };
 }
 
-/** Human label for a target origin: Local / Production / the bare host. */
+/** Human label for a target origin: "Local" for localhost, else the bare host. */
 export function domainLabel(baseUrl: string | null | undefined): string | null {
   if (!baseUrl) return null;
   try {
@@ -50,7 +50,6 @@ export function domainLabel(baseUrl: string | null | undefined): string | null {
     if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".localhost")) {
       return "Local";
     }
-    if (host === "immostory.ai" || host === "www.immostory.ai") return "Production";
     return host;
   } catch {
     return null;

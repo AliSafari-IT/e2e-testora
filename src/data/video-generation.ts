@@ -6,7 +6,7 @@ import type {
 } from "@/test-engine/types";
 
 /**
- * Video generation from a listing URL — the full ImmoStory happy path:
+ * Video generation from a listing URL — the full happy path:
  * log in, paste a supported listing URL, let the app scrape it, then submit
  * the approval wizard to kick off rendering.
  *
@@ -45,12 +45,12 @@ const LOGIN_SETUP_SCRIPT = [
   "  const submitButton = Selector('[data-testid=\"login-submit\"]');",
   "  // Hydration gate: the submit button is disabled until isHydrated === true.",
   "  await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 120000 });",
-  "  const password = process.env.IMMOSTORY_PASSWORD || '';",
+  "  const password = process.env.WEBAPP_PASSWORD || '';",
   "  for (let attempt = 0; attempt < 3; attempt++) {",
   "    await t",
-  "      .typeText(emailInput, 'asafarim@gmail.com', { replace: true })",
+  "      .typeText(emailInput, (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), { replace: true })",
   "      .typeText(passwordInput, password, { replace: true });",
-  "    if ((await emailInput.value) === 'asafarim@gmail.com' && (await passwordInput.value) === password) break;",
+  "    if ((await emailInput.value) === (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com') && (await passwordInput.value) === password) break;",
   "  }",
   "  await t.click(submitButton);",
   "  // Confirm the credentials were accepted. The app races its post-login",
@@ -135,7 +135,7 @@ export const videoGenerationFR: FunctionalRequirementDefinition = {
   title: "Video generation flow",
   description:
     "Create a marketing video from a supported real-estate listing URL: scrape, approve, render.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 export const createVideoFromUrlSuite: TestSuiteDefinition = {

@@ -6,7 +6,7 @@ import type {
 } from "@/test-engine/types";
 
 /**
- * Login (email/password) coverage against the real ImmoStory login page.
+ * Login (email/password) coverage against the app under test's login page.
  *
  * These cases were originally generic fill/submit scenarios with placeholder
  * expectations (redirect to /dashboard, a [role="alert"] error element). The
@@ -28,7 +28,7 @@ import type {
  * The login inputs hydrate after their SSR HTML renders, so each attempt
  * hydration-gates on the submit button enabling and re-types until the values
  * stick (see [[immo-ali-hydration-race]]). The shared password comes from
- * IMMOSTORY_PASSWORD; runs pass the sentinel '__VALID__' to request it.
+ * WEBAPP_PASSWORD; runs pass the sentinel '__VALID__' to request it.
  */
 
 // One UI login attempt, parameterised by `run`:
@@ -51,7 +51,7 @@ const LOGIN_ATTEMPT_SCRIPT = [
   "// Hydration gate: submit is disabled until isHydrated === true.",
   "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
   "const email = run.email;",
-  "const password = run.password === '__VALID__' ? (process.env.IMMOSTORY_PASSWORD || '') : run.password;",
+  "const password = run.password === '__VALID__' ? (process.env.WEBAPP_PASSWORD || '') : run.password;",
   "async function setField(sel, val) {",
   "  if (val === '') { if ((await sel.value) !== '') await t.selectText(sel).pressKey('delete'); return; }",
   "  await t.typeText(sel, val, { replace: true });",
@@ -82,14 +82,14 @@ const LOGIN_ATTEMPT_SCRIPT = [
 ].join("\n");
 
 const RATE_LIMIT_SCRIPT = [
-  "const api = process.env.IMMOSTORY_API_URL || 'http://localhost:3234/api/v1';",
+  "const api = process.env.WEBAPP_API_URL || 'http://localhost:3234/api/v1';",
   "// /auth/login is throttled at 10/60s. Fire a rapid burst of bad-credential",
   "// attempts and assert the throttler eventually replies HTTP 429.",
   "let saw429 = false;",
   "let lastStatus = 0;",
   "for (let i = 0; i < 15; i++) {",
   "  const res = await t.request.post(api + '/auth/login', {",
-  "    body: { email: 'asafarim@gmail.com', password: 'definitely-wrong-' + i },",
+  "    body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: 'definitely-wrong-' + i },",
   "  });",
   "  lastStatus = res.status;",
   "  if (res.status === 429) { saw429 = true; break; }",
@@ -101,7 +101,7 @@ export const authenticationFR: FunctionalRequirementDefinition = {
   id: "auth",
   title: "Authentication",
   description: "Covers all login and signup flows, including validation and rate limiting.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 export const loginFlowSuite: TestSuiteDefinition = {
@@ -119,7 +119,7 @@ export const loginWithEmailFixture: TestFixtureDefinition = {
   commonInput: {},
 };
 
-const ACCOUNT_EMAIL = "asafarim@gmail.com";
+const ACCOUNT_EMAIL = (process.env.WEBAPP_ADMIN_EMAIL || "admin@example.com");
 
 export const loginTestCases: TestCaseDefinition[] = [
   {

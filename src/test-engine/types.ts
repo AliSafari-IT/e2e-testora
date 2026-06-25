@@ -3,7 +3,7 @@ export interface FunctionalRequirementDefinition {
   title: string;
   description: string;
   // Environment root shared by every fixture under this FR's suites (e.g.
-  // http://localhost:3233 or https://immostory.ai). See resolveFixtureBaseUrl().
+  // http://localhost:3233 or https://app.example.com). See resolveFixtureBaseUrl().
   baseUrl?: string;
 }
 

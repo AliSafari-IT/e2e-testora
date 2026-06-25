@@ -46,6 +46,7 @@ const SCOPE_TABS: { scope: RunScope; label: string }[] = [
   { scope: "fixture", label: "Fixture" },
   { scope: "suite", label: "Test suite" },
   { scope: "requirement", label: "Functional requirement" },
+  { scope: "all", label: "All requirements" },
 ];
 
 // The "base scope" — which deployment a run targets. Picked once; every run
@@ -58,10 +59,17 @@ interface EnvPreset {
   apiUrl: string;
 }
 
+// Preset URLs come from the environment so no app-specific deployment is baked
+// into the tool. The "Remote" preset only appears when its env vars are set.
+const LOCAL_BASE = process.env.NEXT_PUBLIC_WEBAPP_BASE_URL || "http://localhost:3233";
+const LOCAL_API = process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1";
+const REMOTE_BASE = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_BASE_URL || "";
+const REMOTE_API = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_API_URL || "";
+
 const ENV_PRESETS: EnvPreset[] = [
   { id: "default", label: "Default (seed)", baseUrl: "", apiUrl: "" },
-  { id: "local", label: "Local", baseUrl: "http://localhost:3233", apiUrl: "http://localhost:3234/api/v1" },
-  { id: "production", label: "Production", baseUrl: "https://immostory.ai", apiUrl: "https://api.immostory.ai/api/v1" },
+  { id: "local", label: "Local", baseUrl: LOCAL_BASE, apiUrl: LOCAL_API },
+  ...(REMOTE_BASE ? [{ id: "remote", label: "Remote", baseUrl: REMOTE_BASE, apiUrl: REMOTE_API }] : []),
   { id: "custom", label: "Custom…", baseUrl: "", apiUrl: "" },
 ];
 
@@ -251,10 +259,30 @@ export function RunPanel() {
   }, []);
 
   // The currently selected id and a human label for the active scope, so the
-  // single Run button and disabled-state logic don't branch three ways.
+  // single Run button and disabled-state logic don't branch every way. "all"
+  // needs no id.
   const selectedId =
-    scope === "fixture" ? selectedFixtureId : scope === "suite" ? selectedSuiteId : selectedRequirementId;
-  const scopeLabel = scope === "fixture" ? "fixture" : scope === "suite" ? "suite" : "requirement";
+    scope === "fixture"
+      ? selectedFixtureId
+      : scope === "suite"
+        ? selectedSuiteId
+        : scope === "requirement"
+          ? selectedRequirementId
+          : "";
+  const scopeLabel =
+    scope === "fixture"
+      ? "fixture"
+      : scope === "suite"
+        ? "suite"
+        : scope === "requirement"
+          ? "requirement"
+          : "all requirements";
+  const canRun = scope === "all" ? true : Boolean(selectedId);
+  // Totals shown for the "all" scope.
+  const allTotals = requirements.reduce(
+    (acc, r) => ({ fixtures: acc.fixtures + r.fixtureCount, cases: acc.cases + r.caseCount }),
+    { fixtures: 0, cases: 0 },
+  );
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
@@ -272,7 +300,7 @@ export function RunPanel() {
         <CardHeader>
           <CardTitle>Target environment</CardTitle>
           <CardDescription>
-            Point the run at a deployment — the same tests run against local or production with no
+            Point the run at a deployment — the same tests run against local or remote with no
             change to their content. APIs use this base; UI smokes open it in the browser.
           </CardDescription>
         </CardHeader>
@@ -305,7 +333,7 @@ export function RunPanel() {
                 Site base URL
                 <input
                   className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
-                  placeholder="https://immostory.ai"
+                  placeholder="https://app.example.com"
                   value={environment.baseUrl ?? ""}
                   onChange={(event) =>
                     setEnvironment({ ...environment, baseUrl: event.target.value.trim() || undefined })
@@ -317,7 +345,7 @@ export function RunPanel() {
                 API base URL
                 <input
                   className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
-                  placeholder="https://api.immostory.ai/api/v1"
+                  placeholder="https://api.example.com/api/v1"
                   value={environment.apiUrl ?? ""}
                   onChange={(event) =>
                     setEnvironment({ ...environment, apiUrl: event.target.value.trim() || undefined })
@@ -440,7 +468,14 @@ export function RunPanel() {
               </select>
             )}
 
-            <Button onClick={() => startRun({ scope, id: selectedId })} disabled={running || !selectedId}>
+            {scope === "all" && (
+              <span className="text-sm text-muted-foreground">
+                Runs every functional requirement — {requirements.length} requirement(s),{" "}
+                {allTotals.fixtures} fixtures, {allTotals.cases} cases — against the selected target.
+              </span>
+            )}
+
+            <Button onClick={() => startRun({ scope, id: selectedId })} disabled={running || !canRun}>
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
               {running ? "Running..." : `Run ${scopeLabel}`}
             </Button>

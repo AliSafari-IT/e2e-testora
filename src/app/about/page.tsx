@@ -29,7 +29,7 @@ import {
 export const metadata: Metadata = {
   title: "About & Guide · e2e-testora",
   description:
-    "What testora is, the mental model behind it, and a complete hands-on guide to building end-to-end coverage for any app — illustrated with ImmoStory AI.",
+    "What testora is, the mental model behind it, and a complete hands-on guide to building end-to-end coverage for any app — illustrated with the app under test.",
 };
 
 export default function AboutPage() {
@@ -78,7 +78,7 @@ function Hero() {
           product must do as structured data — requirements, suites, fixtures, cases — and testora
           turns it into live TestCafe browser runs, streams the console as it goes, and stores every
           result. It works for <span className="text-foreground">any web app</span>; throughout this
-          guide we drive the real <span className="text-foreground">ImmoStory AI</span> app and its
+          guide we drive the real <span className="text-foreground">the app under test</span> app and its
           local dev environment as the worked example.
         </p>
         <div className="flex flex-wrap gap-3">
@@ -225,13 +225,13 @@ function Anatomy() {
     <Section
       kicker="Anatomy"
       title="What a slice of the catalog looks like"
-      lead="Here is the ImmoStory login capability expressed as testora data. Notice how the fixture’s relative baseUrl is resolved against the requirement’s environment root."
+      lead="Here is an example login capability expressed as testora data. Notice how the fixture’s relative baseUrl is resolved against the requirement’s environment root."
     >
       <CodeBlock label="the catalog, as data">{`// Functional Requirement — the capability + its environment
 const authenticationFR = {
   id: "auth",
   title: "Authentication",
-  baseUrl: "http://localhost:3233",   // ImmoStory dev frontend
+  baseUrl: "http://localhost:3233",   // app dev frontend
 };
 
 // Suite — a coherent group under that requirement
@@ -285,7 +285,7 @@ function ThreeFlavors() {
       icon: Code2,
       tone: "success" as const,
       tagline: "Raw TestCafe. Full control.",
-      body: "When the flow doesn’t fit a template, drop down to a real TestCafe body with the `t` controller and the current `run`. This is how every ImmoStory case is written — multi-step flows, API calls, custom waits.",
+      body: "When the flow doesn’t fit a template, drop down to a real TestCafe body with the `t` controller and the current `run`. This is how every the app under test case is written — multi-step flows, API calls, custom waits.",
     },
   ];
   return (
@@ -340,15 +340,15 @@ function Environments() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-accent" />
-              ImmoStory dev environment
+              Dev environment
             </CardTitle>
             <CardDescription>What the seeded examples target out of the box.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm">
             <KV k="Frontend" v="http://localhost:3233" />
             <KV k="API" v="http://localhost:3234/api/v1" />
-            <KV k="Secret" v="IMMOSTORY_PASSWORD (env)" />
-            <KV k="API override" v="IMMOSTORY_API_URL (env)" />
+            <KV k="Secret" v="WEBAPP_PASSWORD (env)" />
+            <KV k="API override" v="WEBAPP_API_URL (env)" />
           </CardContent>
         </Card>
         <Card className="bg-card/60">
@@ -361,14 +361,14 @@ function Environments() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
             <ResolveRow path={`"/en/login"`} note="relative → joined onto the requirement root" result="http://localhost:3233/en/login" />
-            <ResolveRow path={`"https://immostory.ai/en/login"`} note="absolute → full override" result="https://immostory.ai/en/login" />
+            <ResolveRow path={`"https://app.example.com/en/login"`} note="absolute → full override" result="https://app.example.com/en/login" />
             <ResolveRow path={`""`} note="empty → the requirement root itself" result="http://localhost:3233" />
           </CardContent>
         </Card>
       </div>
       <Tip icon={ShieldCheck}>
         Secrets never live in the catalog. Scripts read them from the environment at run time
-        (e.g. <code className="rounded bg-muted px-1">process.env.IMMOSTORY_PASSWORD</code>), and
+        (e.g. <code className="rounded bg-muted px-1">process.env.WEBAPP_PASSWORD</code>), and
         runs pass a sentinel like <code className="rounded bg-muted px-1">{"\"__VALID__\""}</code> to
         request “the real password” without ever storing it.
       </Tip>
@@ -380,7 +380,7 @@ function WorkedExample() {
   const steps = [
     {
       title: "Define the requirement",
-      body: "Create an FR for the capability and set its environment root. For ImmoStory login that’s Authentication @ http://localhost:3233.",
+      body: "Create an FR for the capability and set its environment root. For the app under test login that’s Authentication @ http://localhost:3233.",
       href: "/requirements",
       cta: "Open Requirements",
     },
@@ -419,7 +419,7 @@ function WorkedExample() {
     <Section
       kicker="End to end"
       title="Build a capability’s coverage in six moves"
-      lead="The same path works for any app. Here it is for ImmoStory’s login — from empty catalog to green checks."
+      lead="The same path works for any app. Here it is for the app under test’s login — from empty catalog to green checks."
     >
       <ol className="flex flex-col gap-3">
         {steps.map((s, i) => (
@@ -540,13 +540,13 @@ function Recipes() {
       icon: Zap,
       title: "API net + browser smoke",
       problem: "Driving the full browser wizard for every variation is slow and flaky.",
-      fix: "Cover the matrix fast through t.request against the API, then keep one thin browser case to prove the real flow end-to-end. (See ImmoStory’s scraper-routing vs scraper-live.)",
+      fix: "Cover the matrix fast through t.request against the API, then keep one thin browser case to prove the real flow end-to-end. (See the app under test’s scraper-routing vs scraper-live.)",
     },
     {
       icon: Repeat,
       title: "Keep success cases re-runnable",
       problem: "A passing sign-up creates a user — run it twice and the unique-email constraint trips.",
-      fix: "Generate a fresh plus-addressed email per run (asafarim+testimmo<unique>@gmail.com) so the suite is idempotent.",
+      fix: "Generate a fresh plus-addressed email per run (admin+e2e<unique>@example.com) so the suite is idempotent.",
     },
     {
       icon: ShieldCheck,
@@ -559,7 +559,7 @@ function Recipes() {
     <Section
       kicker="Field notes"
       title="Patterns that survive a real app"
-      lead="These are the exact tactics the ImmoStory suites use to stay green against a live, race-prone dev server. Steal them for your own app."
+      lead="These are the exact tactics the example suites use to stay green against a live, race-prone dev server. Steal them for your own app."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         {recipes.map((r) => (
@@ -601,7 +601,7 @@ function BringYourOwnApp() {
     <Section
       kicker="Make it yours"
       title="Adapting testora to any app"
-      lead="Nothing here is ImmoStory-specific. Swap the URLs and selectors and the same workflow models a checkout, a dashboard, an onboarding wizard — anything with a browser or an API."
+      lead="Nothing here is app-specific. Swap the URLs and selectors and the same workflow models a checkout, a dashboard, an onboarding wizard — anything with a browser or an API."
     >
       <Card className="bg-card/60">
         <CardContent className="flex flex-col gap-3 p-5">
@@ -653,7 +653,7 @@ function FooterCta() {
         <div className="text-lg font-semibold">That’s the whole loop.</div>
         <p className="max-w-xl text-sm text-muted-foreground">
           Model the behaviour, run it against the real app, read the verdict. Start with the seeded
-          ImmoStory requirements, or wire up your own.
+          example requirements, or wire up your own.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Button asChild>

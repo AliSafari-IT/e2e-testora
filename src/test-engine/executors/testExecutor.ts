@@ -397,3 +397,26 @@ export async function loadRequirementRunPlan(frId: string): Promise<RunPlan | nu
 
   return { label: `requirement "${frRow.title}"`, units };
 }
+
+/** Build a run plan covering every fixture of every functional requirement. */
+export async function loadAllRunPlan(): Promise<RunPlan | null> {
+  const frRows = await db.query.functionalRequirements.findMany({
+    with: { suites: { with: { fixtures: { with: { cases: true } } } } },
+  });
+
+  const units: RunUnit[] = [];
+  for (const frRow of frRows) {
+    for (const suiteRow of frRow.suites) {
+      for (const fixtureRow of suiteRow.fixtures) {
+        units.push({
+          suiteTitle: suiteRow.title,
+          fixture: mapFixtureRow(fixtureRow, frRow.baseUrl),
+          cases: fixtureRow.cases.map(mapCaseRow),
+        });
+      }
+    }
+  }
+
+  if (units.length === 0) return null;
+  return { label: `all requirements (${frRows.length})`, units };
+}

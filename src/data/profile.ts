@@ -7,7 +7,7 @@ import type {
 import { apiScript, BROWSER_ADMIN_LOGIN } from "./_admin-shared";
 
 /**
- * User account coverage for ImmoStory — the self-service profile page and the
+ * User account coverage for the app under test — the self-service profile page and the
  * navbar user-profile dropdown.
  *
  *   /en/profile          — ProfilePage, four tabs (Overview / Profile /
@@ -18,7 +18,7 @@ import { apiScript, BROWSER_ADMIN_LOGIN } from "./_admin-shared";
  *                          Admin Area (admin/superadmin only), Privacy Center,
  *                          Logout, plus credits + member-since meta.
  *
- * UI cases log in through the browser (IMMOSTORY_ADMIN_EMAIL / IMMOSTORY_PASSWORD
+ * UI cases log in through the browser (WEBAPP_ADMIN_EMAIL / WEBAPP_PASSWORD
  * — any real account works; the seeded test account is a superadmin, so the
  * Admin Area link is expected). API cases drive the user endpoints with
  * `t.request` and a cached bearer token. See _admin-shared.ts for auth + the
@@ -42,7 +42,7 @@ export const profileAccountFR: FunctionalRequirementDefinition = {
   title: "Profile & Account",
   description:
     "Self-service account management: the /profile page with its Overview, Profile, Security and Privacy tabs, and the navbar user-profile dropdown.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 /* ------------------------------------------------------------------ */

@@ -18,7 +18,7 @@ export const systemOpsFR: FunctionalRequirementDefinition = {
   title: "Admin · System Operations",
   description:
     "Platform overview plus pipeline runtime, monitoring and AI/render providers: stats, jobs, scraper, costs, health, analytics, errors, TTS, vision and render QA.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 const pages: AdminPageSpec[] = [

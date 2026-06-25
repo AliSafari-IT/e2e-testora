@@ -19,7 +19,7 @@ export const platformConfigFR: FunctionalRequirementDefinition = {
   title: "Admin · Platform Configuration",
   description:
     "Core configuration plus comms & growth: settings, flags, translations, legal, GDPR, OAuth, mail, campaigns, leads and social.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 const pages: AdminPageSpec[] = [

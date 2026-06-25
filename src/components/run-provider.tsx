@@ -19,9 +19,10 @@ export interface ReportEntry {
   details: Record<string, unknown>;
 }
 
-// A run can be scoped to a single fixture, a whole suite, or a whole
-// functional requirement (every fixture beneath it runs in turn).
-export type RunScope = "fixture" | "suite" | "requirement";
+// A run can be scoped to a single fixture, a whole suite, a whole functional
+// requirement (every fixture beneath it runs in turn), or "all" requirements at
+// once. The "all" scope needs no id.
+export type RunScope = "fixture" | "suite" | "requirement" | "all";
 
 export interface RunTarget {
   scope: RunScope;
@@ -54,8 +55,9 @@ interface RunContextValue {
   cancelRun: () => Promise<void>;
 }
 
-// Maps a run scope to the request-body key the /api/run endpoint expects.
-const SCOPE_BODY_KEY: Record<RunScope, "fixtureId" | "suiteId" | "frId"> = {
+// Maps an id-based run scope to the request-body key the /api/run endpoint
+// expects. ("all" is handled separately — it carries no id.)
+const SCOPE_BODY_KEY: Record<"fixture" | "suite" | "requirement", "fixtureId" | "suiteId" | "frId"> = {
   fixture: "fixtureId",
   suite: "suiteId",
   requirement: "frId",
@@ -267,6 +269,10 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
 
   const startRun = useCallback(
     async (target: RunTarget) => {
+      if (target.scope === "all") {
+        await beginRun({ all: true });
+        return;
+      }
       if (!target.id) return;
       await beginRun({ [SCOPE_BODY_KEY[target.scope]]: target.id });
     },

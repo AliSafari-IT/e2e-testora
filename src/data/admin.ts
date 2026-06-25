@@ -34,16 +34,15 @@ import {
  * smoke that proves an admin can load the page and its table renders.
  *
  * Auth: every case logs in once per fixture via /auth/login (token cached on
- * globalThis for the spec process) using IMMOSTORY_ADMIN_EMAIL (default
- * asafarim@gmail.com) + IMMOSTORY_PASSWORD. THE TEST ACCOUNT MUST BE
- * admin/superadmin — otherwise the admin endpoints answer 403 and the cases
- * fail with a message saying so. /auth/login is throttled (10/60s); the token
- * cache keeps each API fixture to a single login, but running the whole
- * requirement at once does many logins — prefer running a single suite/fixture
- * while iterating.
+ * globalThis for the spec process) using WEBAPP_ADMIN_EMAIL + WEBAPP_PASSWORD.
+ * THE TEST ACCOUNT MUST BE admin/superadmin — otherwise the admin endpoints
+ * answer 403 and the cases fail with a message saying so. /auth/login is
+ * throttled (10/60s); the token cache keeps each API fixture to a single login,
+ * but running the whole requirement at once does many logins — prefer running a
+ * single suite/fixture while iterating.
  *
  * Mutations are kept re-runnable and self-cleaning: temp accounts use unique
- * plus-addressed emails (asafarim+e2eadmin…@gmail.com) and are soft-deleted at
+ * plus-addressed emails derived from WEBAPP_ADMIN_EMAIL and are soft-deleted at
  * the end of the case. Credit assertions compare two mutation responses
  * (delta in → balance out) so they never depend on the exact starter balance.
  */
@@ -57,7 +56,7 @@ export const accountsBillingFR: FunctionalRequirementDefinition = {
   title: "Admin · Accounts & Billing",
   description:
     "Accounts and billing administration: Users, Clients, Agents, Credits, Payments, RevenueCat, Pricing, Promo Codes, E-Invoicing and Accounting.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 export const adminUsersSuite: TestSuiteDefinition = {
@@ -246,7 +245,7 @@ for (const u of res.body.data) {
     script: apiScript(`
 const created = await createTempUser('user');
 await t.expect(created.id).ok('created user is missing an id');
-await t.expect((created.email || '').toLowerCase()).contains('asafarim+e2eadmin', 'unexpected created email');
+await t.expect((created.email || '').toLowerCase()).contains('+e2e', 'unexpected created email');
 
 const fetched = await authGet('/admin/users/' + created.id);
 await t.expect(fetched.status).eql(200, 'expected to read the new user back');

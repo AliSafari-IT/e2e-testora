@@ -12,7 +12,7 @@ import type {
  *    with t.request to cover the happy paths (individual + business) and the
  *    full validation matrix (weak password, missing consent, bad email,
  *    missing required field, duplicate email → 409). Each success run uses a
- *    unique plus-addressed email (asafarim+testimmo…@gmail.com) so the suite is
+ *    a unique plus-addressed email derived from WEBAPP_ADMIN_EMAIL so the suite is
  *    re-runnable without colliding on the unique-email constraint.
  *
  *  - `register-ui` (browser happy path): fills the real registration form and
@@ -33,11 +33,14 @@ const REGISTER_API_SCRIPT = [
   "const api = run.apiUrl || '" + API_DEFAULT + "';",
   "// Fresh, unique e-mail per run keeps the success cases re-runnable.",
   "const unique = Date.now() + '_' + Math.floor(Math.random() * 1e6);",
+  "// Plus-address the configured admin email so success cases are re-runnable.",
+  "const __e = (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com').split('@');",
+  "const email = __e[0] + '+e2e' + unique + '@' + (__e[1] || 'example.com');",
   "const base = {",
   "  accountType: 'individual',",
   "  firstName: 'E2E', lastName: 'Tester',",
   "  streetAndNumber: 'Teststraat 1', postalCode: '2000', city: 'Antwerpen',",
-  "  email: 'asafarim+testimmo' + unique + '@gmail.com',",
+  "  email: email,",
   "  password: 'TestPass123!',",
   "  language: 'en',",
   "  ageConfirmed: true, termsAccepted: true, privacyAccepted: true,",
@@ -61,7 +64,8 @@ const REGISTER_API_SCRIPT = [
 
 const REGISTER_UI_SCRIPT = [
   "const unique = Date.now() + '_' + Math.floor(Math.random() * 1e6);",
-  "const email = 'asafarim+testimmoui' + unique + '@gmail.com';",
+  "const __e = (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com').split('@');",
+  "const email = __e[0] + '+e2eui' + unique + '@' + (__e[1] || 'example.com');",
   "const password = 'TestPass123!';",
   "const submit = Selector('[data-testid=\"register-submit\"]');",
   "await t.expect(Selector('[data-testid=\"register-firstName\"]').with({ timeout: 30000 }).exists).ok('register form did not render');",
@@ -130,7 +134,7 @@ export const registrationFR: FunctionalRequirementDefinition = {
   id: "registration",
   title: "Registration",
   description: "New-user sign-up: account creation, validation, and the post-signup redirect.",
-  baseUrl: "http://localhost:3233",
+  baseUrl: process.env.WEBAPP_BASE_URL || "http://localhost:3233",
 };
 
 export const registerFlowSuite: TestSuiteDefinition = {
@@ -173,7 +177,7 @@ export const registrationTestCases: TestCaseDefinition[] = [
       { scenario: "consent not accepted", overrides: { termsAccepted: false }, expectStatus: 400 },
       { scenario: "invalid email format", overrides: { email: "not-an-email" }, expectStatus: 400 },
       { scenario: "missing required city", overrides: { city: "" }, expectStatus: 400 },
-      { scenario: "duplicate email", overrides: { email: "asafarim@gmail.com" }, expectStatus: 409 },
+      { scenario: "duplicate email", overrides: { email: (process.env.WEBAPP_ADMIN_EMAIL || "admin@example.com") }, expectStatus: 409 },
     ],
     expected: {},
     script: REGISTER_API_SCRIPT,
