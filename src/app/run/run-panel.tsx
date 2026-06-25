@@ -172,6 +172,17 @@ function logLineClassName(line: string): string {
   return "text-green-300/90";
 }
 
+/** Extract the test title from the most recent TestCafe completion marker. */
+function lastTestTitle(logs: string[]): string | null {
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const trimmed = logs[i]!.trim();
+    if (trimmed.startsWith("√") || trimmed.startsWith("×")) {
+      return trimmed.slice(1).trim();
+    }
+  }
+  return null;
+}
+
 export function RunPanel() {
   const searchParams = useSearchParams();
   // Run state lives in RunProvider (mounted in the layout) so it survives
@@ -357,6 +368,8 @@ export function RunPanel() {
     const counted = logs.filter((line) => /^\s*[√×]/.test(line)).length;
     return progressTotal > 0 ? Math.min(counted, progressTotal) : counted;
   }, [logs, progressTotal]);
+
+  const currentTestTitle = useMemo(() => lastTestTitle(logs), [logs]);
 
   const progressPercent =
     progressTotal > 0
@@ -631,6 +644,12 @@ export function RunPanel() {
               <span>Running {runMeta?.label ?? scopeLabel}</span>
               <span>{Math.round(progressPercent)}%</span>
             </div>
+            {currentTestTitle && (
+              <div className="mt-2 truncate text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Current:</span>{" "}
+                {currentTestTitle}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
