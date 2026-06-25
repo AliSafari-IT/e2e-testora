@@ -28,7 +28,7 @@ import type {
  * The login inputs hydrate after their SSR HTML renders, so each attempt
  * hydration-gates on the submit button enabling and re-types until the values
  * stick (see [[immo-ali-hydration-race]]). The shared password comes from
- * WEBAPP_PASSWORD; runs pass the sentinel '__VALID__' to request it.
+ * WEBAPP_ADMIN_PASSWORD; runs pass the sentinel '__VALID__' to request it.
  */
 
 // One UI login attempt, parameterised by `run`:
@@ -51,7 +51,7 @@ const LOGIN_ATTEMPT_SCRIPT = [
   "// Hydration gate: submit is disabled until isHydrated === true.",
   "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
   "const email = run.email;",
-  "const password = run.password === '__VALID__' ? (process.env.WEBAPP_PASSWORD || '') : run.password;",
+  "const password = run.password === '__VALID__' ? (process.env.WEBAPP_ADMIN_PASSWORD || '') : run.password;",
   "async function setField(sel, val) {",
   "  if (val === '') { if ((await sel.value) !== '') await t.selectText(sel).pressKey('delete'); return; }",
   "  await t.typeText(sel, val, { replace: true });",

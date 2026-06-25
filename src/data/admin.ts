@@ -34,7 +34,7 @@ import {
  * smoke that proves an admin can load the page and its table renders.
  *
  * Auth: every case logs in once per fixture via /auth/login (token cached on
- * globalThis for the spec process) using WEBAPP_ADMIN_EMAIL + WEBAPP_PASSWORD.
+ * globalThis for the spec process) using WEBAPP_ADMIN_EMAIL + WEBAPP_ADMIN_PASSWORD.
  * THE TEST ACCOUNT MUST BE admin/superadmin — otherwise the admin endpoints
  * answer 403 and the cases fail with a message saying so. /auth/login is
  * throttled (10/60s); the token cache keeps each API fixture to a single login,

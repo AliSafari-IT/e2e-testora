@@ -347,7 +347,7 @@ function Environments() {
           <CardContent className="flex flex-col gap-2 text-sm">
             <KV k="Frontend" v="http://localhost:3233" />
             <KV k="API" v="http://localhost:3234/api/v1" />
-            <KV k="Secret" v="WEBAPP_PASSWORD (env)" />
+            <KV k="Secret" v="WEBAPP_ADMIN_PASSWORD (env)" />
             <KV k="API override" v="WEBAPP_API_URL (env)" />
           </CardContent>
         </Card>
@@ -368,7 +368,7 @@ function Environments() {
       </div>
       <Tip icon={ShieldCheck}>
         Secrets never live in the catalog. Scripts read them from the environment at run time
-        (e.g. <code className="rounded bg-muted px-1">process.env.WEBAPP_PASSWORD</code>), and
+        (e.g. <code className="rounded bg-muted px-1">process.env.WEBAPP_ADMIN_PASSWORD</code>), and
         runs pass a sentinel like <code className="rounded bg-muted px-1">{"\"__VALID__\""}</code> to
         request “the real password” without ever storing it.
       </Tip>

@@ -27,7 +27,7 @@ import type {
  *    not just that routing is wired up.
  *
  * Both fixtures authenticate via /auth/login with t.request (the scraper
- * endpoints are JWT-guarded); the password comes from WEBAPP_PASSWORD.
+ * endpoints are JWT-guarded); the password comes from WEBAPP_ADMIN_PASSWORD.
  */
 
 const API_DEFAULT = "http://localhost:3234/api/v1";
@@ -49,7 +49,7 @@ const LOGIN_SNIPPET = [
   "  let last = 0;",
   "  for (let i = 0; i < 4; i++) {",
   "    const login = await t.request.post(api + '/auth/login', {",
-  "      body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: process.env.WEBAPP_PASSWORD || '' },",
+  "      body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: process.env.WEBAPP_ADMIN_PASSWORD || '' },",
   "    });",
   "    last = login.status;",
   "    if (login.status === 200) { globalThis.__e2eToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",

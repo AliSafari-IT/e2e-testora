@@ -1,22 +1,66 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Check, Copy, FileCode2, FileJson, Filter, Loader2, Trash2, X, AlertTriangle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Check,
+  Copy,
+  FileCode2,
+  FileJson,
+  Filter,
+  Loader2,
+  RotateCcw,
+  Trash2,
+  X,
+  AlertTriangle,
+} from "lucide-react";
 import type { ReportResultRow } from "@/lib/queries";
-import { buildHtmlReport, buildJsonReport, dateStamp, summarize, type ReportBrand } from "@/lib/report";
+import {
+  buildHtmlReport,
+  buildJsonReport,
+  dateStamp,
+  summarize,
+  type ReportBrand,
+} from "@/lib/report";
 import { saveTextFile } from "@/lib/save-file";
 import { getDomainBrands, hostFromUrl } from "@/lib/domain-logos";
+import { useRun } from "@/components/run-provider";
+
+/** A result counts as re-runnable when it didn't pass and carries the ids a run needs. */
+function isRerunnable(row: ReportResultRow): boolean {
+  return (
+    (row.status === "failed" || row.status === "error") &&
+    Boolean(row.fixtureId) &&
+    Boolean(row.caseId)
+  );
+}
 
 interface Option {
   id: string;
   title: string;
 }
 
-function distinct(rows: ReportResultRow[], idKey: keyof ReportResultRow, titleKey: keyof ReportResultRow): Option[] {
+function distinct(
+  rows: ReportResultRow[],
+  idKey: keyof ReportResultRow,
+  titleKey: keyof ReportResultRow,
+): Option[] {
   const map = new Map<string, string>();
   for (const row of rows) {
     const id = String(row[idKey] ?? "");
@@ -52,7 +96,11 @@ function brandsForRows(rows: ReportResultRow[]): ReportBrand[] {
 const selectClass =
   "h-9 w-full rounded-md border border-border bg-muted px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
 
-export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[] }) {
+export function ResultsExplorer({
+  rows: initialRows,
+}: {
+  rows: ReportResultRow[];
+}) {
   const [rows, setRows] = useState(initialRows);
   const [search, setSearch] = useState("");
   const [frId, setFrId] = useState("");
@@ -67,25 +115,49 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [errorRow, setErrorRow] = useState<ReportResultRow | null>(null);
   const [copied, setCopied] = useState(false);
-  const [menu, setMenu] = useState<{ x: number; y: number; row: ReportResultRow } | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{ ids: string[]; label: string } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    row: ReportResultRow;
+  } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    ids: string[];
+    label: string;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const { rerunCases, running } = useRun();
 
   const frOptions = useMemo(() => distinct(rows, "frId", "frTitle"), [rows]);
-  const suiteScope = useMemo(() => rows.filter((r) => !frId || r.frId === frId), [rows, frId]);
-  const suiteOptions = useMemo(() => distinct(suiteScope, "suiteId", "suiteTitle"), [suiteScope]);
+  const suiteScope = useMemo(
+    () => rows.filter((r) => !frId || r.frId === frId),
+    [rows, frId],
+  );
+  const suiteOptions = useMemo(
+    () => distinct(suiteScope, "suiteId", "suiteTitle"),
+    [suiteScope],
+  );
   const fixtureScope = useMemo(
     () => suiteScope.filter((r) => !suiteId || r.suiteId === suiteId),
     [suiteScope, suiteId],
   );
-  const fixtureOptions = useMemo(() => distinct(fixtureScope, "fixtureId", "fixtureTitle"), [fixtureScope]);
+  const fixtureOptions = useMemo(
+    () => distinct(fixtureScope, "fixtureId", "fixtureTitle"),
+    [fixtureScope],
+  );
   const caseScope = useMemo(
     () => fixtureScope.filter((r) => !fixtureId || r.fixtureId === fixtureId),
     [fixtureScope, fixtureId],
   );
-  const caseOptions = useMemo(() => distinct(caseScope, "caseId", "caseTitle"), [caseScope]);
-  const statusOptions = useMemo(() => [...new Set(rows.map((r) => r.status))].sort(), [rows]);
+  const caseOptions = useMemo(
+    () => distinct(caseScope, "caseId", "caseTitle"),
+    [caseScope],
+  );
+  const statusOptions = useMemo(
+    () => [...new Set(rows.map((r) => r.status))].sort(),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     const fromTs = from ? new Date(from).getTime() : null;
@@ -101,7 +173,8 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
       if (fromTs != null && ts < fromTs) return false;
       if (toTs != null && ts > toTs) return false;
       if (q) {
-        const hay = `${r.caseTitle} ${r.fixtureTitle} ${r.suiteTitle} ${r.frTitle} ${r.errorMessage ?? ""}`.toLowerCase();
+        const hay =
+          `${r.caseTitle} ${r.fixtureTitle} ${r.suiteTitle} ${r.frTitle} ${r.errorMessage ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -109,14 +182,22 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
   }, [rows, frId, suiteId, fixtureId, caseId, status, from, to, search]);
 
   const summary = useMemo(() => summarize(filtered), [filtered]);
-  const hasFilters = Boolean(frId || suiteId || fixtureId || caseId || status || from || to || search);
+  const hasFilters = Boolean(
+    frId || suiteId || fixtureId || caseId || status || from || to || search,
+  );
 
-  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected]);
-  const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+  const selectedRows = useMemo(
+    () => rows.filter((r) => selected.has(r.id)),
+    [rows, selected],
+  );
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const someFilteredSelected = filtered.some((r) => selected.has(r.id));
 
   useEffect(() => {
-    if (headerCbRef.current) headerCbRef.current.indeterminate = someFilteredSelected && !allFilteredSelected;
+    if (headerCbRef.current)
+      headerCbRef.current.indeterminate =
+        someFilteredSelected && !allFilteredSelected;
   }, [someFilteredSelected, allFilteredSelected]);
 
   // Close the context menu on any outside interaction.
@@ -164,7 +245,8 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
 
   function describeFilters(): string[] {
     const out: string[] = [];
-    const label = (opts: Option[], id: string) => opts.find((o) => o.id === id)?.title ?? id;
+    const label = (opts: Option[], id: string) =>
+      opts.find((o) => o.id === id)?.title ?? id;
     if (frId) out.push(`Functional requirement: ${label(frOptions, frId)}`);
     if (suiteId) out.push(`Suite: ${label(suiteOptions, suiteId)}`);
     if (fixtureId) out.push(`Fixture: ${label(fixtureOptions, fixtureId)}`);
@@ -176,7 +258,11 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
     return out;
   }
 
-  async function exportRows(kind: "json" | "html", rowsToExport: ReportResultRow[], filters: string[]) {
+  async function exportRows(
+    kind: "json" | "html",
+    rowsToExport: ReportResultRow[],
+    filters: string[],
+  ) {
     if (rowsToExport.length === 0 || busy) return;
     setBusy(kind);
     try {
@@ -201,6 +287,17 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
     } finally {
       setBusy(null);
     }
+  }
+
+  // Re-run every re-runnable (failed/errored) result among `rowsToRerun` by
+  // re-targeting their (fixture, case) pairs, then jump to the live run view.
+  async function rerunRows(rowsToRerun: ReportResultRow[]) {
+    const cases = rowsToRerun
+      .filter(isRerunnable)
+      .map((r) => ({ fixtureId: r.fixtureId, caseId: r.caseId }));
+    if (cases.length === 0) return;
+    await rerunCases(cases);
+    router.push("/run");
   }
 
   function deleteIds(ids: string[], label: string) {
@@ -239,8 +336,27 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
   // Context menu acts on the selection if the right-clicked row is part of it,
   // otherwise on just that row.
   const menuTargetRows =
-    menu && selected.has(menu.row.id) && selected.size > 0 ? selectedRows : menu ? [menu.row] : [];
-  const menuIsSelection = menuTargetRows.length > 1 || (menu != null && selected.has(menu.row.id) && selected.size > 0);
+    menu && selected.has(menu.row.id) && selected.size > 0
+      ? selectedRows
+      : menu
+        ? [menu.row]
+        : [];
+  const menuIsSelection =
+    menuTargetRows.length > 1 ||
+    (menu != null && selected.has(menu.row.id) && selected.size > 0);
+
+  // Distinct re-runnable cases (deduped by fixture+case) in a set of rows — used
+  // for the "Re-run N" labels, since a run dedupes multi-run cases to one.
+  function rerunnableCaseCount(rowsIn: ReportResultRow[]): number {
+    const set = new Set<string>();
+    for (const r of rowsIn)
+      if (isRerunnable(r)) set.add(`${r.fixtureId}::${r.caseId}`);
+    return set.size;
+  }
+  const selectedRerunCount = rerunnableCaseCount(selectedRows);
+  const menuRerunCount = rerunnableCaseCount(menuTargetRows);
+  const menuSingleRerunnable =
+    menu != null && !menuIsSelection && isRerunnable(menu.row);
 
   function copyError() {
     if (!errorRow?.errorMessage) return;
@@ -254,7 +370,9 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Results</h1>
-          <p className="text-muted-foreground">Filter, select and export stored runs as a shareable report.</p>
+          <p className="text-muted-foreground">
+            Filter, select and export stored runs as a shareable report.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -317,7 +435,11 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Status</span>
-            <select className={selectClass} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select
+              className={selectClass}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
               <option value="">All</option>
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
@@ -327,7 +449,9 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">Functional requirement</span>
+            <span className="text-xs text-muted-foreground">
+              Functional requirement
+            </span>
             <select
               className={selectClass}
               value={frId}
@@ -385,7 +509,11 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">Test case</span>
-            <select className={selectClass} value={caseId} onChange={(e) => setCaseId(e.target.value)}>
+            <select
+              className={selectClass}
+              value={caseId}
+              onChange={(e) => setCaseId(e.target.value)}
+            >
               <option value="">All</option>
               {caseOptions.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -396,11 +524,21 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">From</span>
-            <input type="datetime-local" className={selectClass} value={from} onChange={(e) => setFrom(e.target.value)} />
+            <input
+              type="datetime-local"
+              className={selectClass}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted-foreground">To</span>
-            <input type="datetime-local" className={selectClass} value={to} onChange={(e) => setTo(e.target.value)} />
+            <input
+              type="datetime-local"
+              className={selectClass}
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+            />
           </label>
         </CardContent>
       </Card>
@@ -413,9 +551,13 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
                 {filtered.length} of {rows.length} result(s)
               </CardTitle>
               <CardDescription className="flex flex-wrap items-center gap-3">
-                <span className="text-emerald-500">{summary.passed} passed</span>
+                <span className="text-emerald-500">
+                  {summary.passed} passed
+                </span>
                 <span className="text-red-500">{summary.failed} failed</span>
-                {summary.other > 0 && <span className="text-yellow-500">{summary.other} other</span>}
+                {summary.other > 0 && (
+                  <span className="text-yellow-500">{summary.other} other</span>
+                )}
                 <span>· {summary.passRate}% pass rate</span>
               </CardDescription>
             </div>
@@ -423,7 +565,12 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
               variant="outline"
               size="sm"
               className="text-red-500 hover:text-red-600"
-              onClick={() => deleteIds(filtered.map((r) => r.id), "filtered result(s)")}
+              onClick={() =>
+                deleteIds(
+                  filtered.map((r) => r.id),
+                  "filtered result(s)",
+                )
+              }
               disabled={filtered.length === 0}
             >
               <Trash2 className="h-4 w-4" />
@@ -434,12 +581,19 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
         <CardContent>
           {selected.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
-              <span className="text-sm font-medium">{selected.size} selected</span>
+              <span className="text-sm font-medium">
+                {selected.size} selected
+              </span>
               <span className="flex-1" />
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportRows("html", selectedRows, [...describeFilters(), `Selection: ${selectedRows.length} result(s)`])}
+                onClick={() =>
+                  exportRows("html", selectedRows, [
+                    ...describeFilters(),
+                    `Selection: ${selectedRows.length} result(s)`,
+                  ])
+                }
                 disabled={busy !== null}
               >
                 <FileCode2 className="h-4 w-4" />
@@ -448,17 +602,42 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportRows("json", selectedRows, [...describeFilters(), `Selection: ${selectedRows.length} result(s)`])}
+                onClick={() =>
+                  exportRows("json", selectedRows, [
+                    ...describeFilters(),
+                    `Selection: ${selectedRows.length} result(s)`,
+                  ])
+                }
                 disabled={busy !== null}
               >
                 <FileJson className="h-4 w-4" />
                 Send to JSON
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => deleteIds([...selected], "selected result(s)")}>
+              {selectedRerunCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => rerunRows(selectedRows)}
+                  disabled={running}
+                  title="Re-run the failed/errored results in the selection"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Re-run failed ({selectedRerunCount})
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => deleteIds([...selected], "selected result(s)")}
+              >
                 <Trash2 className="h-4 w-4" />
                 Delete
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelected(new Set())}
+              >
                 <X className="h-4 w-4" />
                 Clear
               </Button>
@@ -466,7 +645,9 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
           )}
 
           {filtered.length === 0 ? (
-            <p className="text-muted-foreground">No results match the current filters.</p>
+            <p className="text-muted-foreground">
+              No results match the current filters.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-sm">
@@ -527,11 +708,22 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
                         </td>
                         <td className="py-2 pr-3">
                           {r.caseTitle}
-                          {r.runIndex != null && <span className="text-muted-foreground"> · run {r.runIndex + 1}</span>}
-                          <div className="text-xs text-muted-foreground">{r.frTitle}</div>
+                          {r.runIndex != null && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · run {r.runIndex + 1}
+                            </span>
+                          )}
+                          <div className="text-xs text-muted-foreground">
+                            {r.frTitle}
+                          </div>
                         </td>
-                        <td className="py-2 pr-3 text-muted-foreground">{r.fixtureTitle}</td>
-                        <td className="py-2 pr-3 text-muted-foreground">{r.suiteTitle}</td>
+                        <td className="py-2 pr-3 text-muted-foreground">
+                          {r.fixtureTitle}
+                        </td>
+                        <td className="py-2 pr-3 text-muted-foreground">
+                          {r.suiteTitle}
+                        </td>
                         <td className="whitespace-nowrap py-2 pr-3 tabular-nums">
                           {r.durationMs != null ? `${r.durationMs} ms` : "—"}
                         </td>
@@ -564,7 +756,10 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
       {menu && (
         <div
           className="fixed z-50 w-56 overflow-hidden rounded-md border border-border bg-card py-1 text-sm shadow-lg"
-          style={{ top: Math.min(menu.y, window.innerHeight - 200), left: Math.min(menu.x, window.innerWidth - 230) }}
+          style={{
+            top: Math.min(menu.y, window.innerHeight - 200),
+            left: Math.min(menu.x, window.innerWidth - 230),
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {menu.row.errorMessage && (
@@ -591,7 +786,9 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
             }}
           >
             <FileCode2 className="h-4 w-4" />
-            Send {menuIsSelection ? `${menuTargetRows.length} selected` : "this"} to HTML
+            Send{" "}
+            {menuIsSelection ? `${menuTargetRows.length} selected` : "this"} to
+            HTML
           </button>
           <button
             type="button"
@@ -605,8 +802,29 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
             }}
           >
             <FileJson className="h-4 w-4" />
-            Send {menuIsSelection ? `${menuTargetRows.length} selected` : "this"} to JSON
+            Send{" "}
+            {menuIsSelection ? `${menuTargetRows.length} selected` : "this"} to
+            JSON
           </button>
+          {(menuIsSelection ? menuRerunCount > 0 : menuSingleRerunnable) && (
+            <>
+              <div className="my-1 border-t border-border" />
+              <button
+                type="button"
+                disabled={running}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted disabled:opacity-50"
+                onClick={() => {
+                  void rerunRows(menuTargetRows);
+                  setMenu(null);
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+                {menuIsSelection
+                  ? `Re-run ${menuRerunCount} failed`
+                  : "Re-run this test"}
+              </button>
+            </>
+          )}
           <div className="my-1 border-t border-border" />
           <button
             type="button"
@@ -620,23 +838,38 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
             }}
           >
             <Trash2 className="h-4 w-4" />
-            Delete {menuIsSelection ? `${menuTargetRows.length} selected` : "this"}
+            Delete{" "}
+            {menuIsSelection ? `${menuTargetRows.length} selected` : "this"}
           </button>
         </div>
       )}
 
       {/* Full error modal */}
-      <Dialog open={errorRow != null} onOpenChange={(open) => !open && setErrorRow(null)}>
+      <Dialog
+        open={errorRow != null}
+        onOpenChange={(open) => !open && setErrorRow(null)}
+      >
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{errorRow?.caseTitle}</DialogTitle>
             <DialogDescription>
-              {errorRow ? `${errorRow.fixtureTitle} · ${new Date(errorRow.createdAt).toLocaleString()}` : ""}
+              {errorRow
+                ? `${errorRow.fixtureTitle} · ${new Date(errorRow.createdAt).toLocaleString()}`
+                : ""}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end">
-            <Button size="sm" variant="outline" className="h-7 px-2" onClick={copyError}>
-              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 px-2"
+              onClick={copyError}
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
               {copied ? "Copied" : "Copy"}
             </Button>
           </div>
@@ -647,37 +880,62 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
       </Dialog>
 
       {/* Delete confirmation modal */}
-      <Dialog open={confirmDelete != null} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+      <Dialog
+        open={confirmDelete != null}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-2 text-red-500">
               <AlertTriangle className="h-5 w-5" />
-              <DialogTitle>Delete {confirmDelete?.ids.length} {confirmDelete?.label}?</DialogTitle>
+              <DialogTitle>
+                Delete {confirmDelete?.ids.length} {confirmDelete?.label}?
+              </DialogTitle>
             </div>
             <DialogDescription>
-              This action cannot be undone. The selected results will be permanently removed from the database.
+              This action cannot be undone. The selected results will be
+              permanently removed from the database.
             </DialogDescription>
           </DialogHeader>
 
-          {confirmDelete && confirmDelete.label.includes("filtered") && hasFilters && (
-            <div className="rounded-md border border-border bg-muted/40 p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">Active filters</p>
-              <ul className="flex flex-wrap gap-1.5">
-                {describeFilters().map((filter) => (
-                  <li key={filter} className="rounded-full bg-background px-2.5 py-1 text-xs text-foreground">
-                    {filter}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {confirmDelete &&
+            confirmDelete.label.includes("filtered") &&
+            hasFilters && (
+              <div className="rounded-md border border-border bg-muted/40 p-3">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Active filters
+                </p>
+                <ul className="flex flex-wrap gap-1.5">
+                  {describeFilters().map((filter) => (
+                    <li
+                      key={filter}
+                      className="rounded-full bg-background px-2.5 py-1 text-xs text-foreground"
+                    >
+                      {filter}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmDelete(null)}
+              disabled={deleting}
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={performDelete} disabled={deleting}>
-              {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            <Button
+              variant="destructive"
+              onClick={performDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-2 h-4 w-4" />
+              )}
               Delete
             </Button>
           </div>

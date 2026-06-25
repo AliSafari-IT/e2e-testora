@@ -45,7 +45,7 @@ const LOGIN_SETUP_SCRIPT = [
   "  const submitButton = Selector('[data-testid=\"login-submit\"]');",
   "  // Hydration gate: the submit button is disabled until isHydrated === true.",
   "  await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 120000 });",
-  "  const password = process.env.WEBAPP_PASSWORD || '';",
+  "  const password = process.env.WEBAPP_ADMIN_PASSWORD || '';",
   "  for (let attempt = 0; attempt < 3; attempt++) {",
   "    await t",
   "      .typeText(emailInput, (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), { replace: true })",

@@ -62,6 +62,18 @@ import {
   profileAccountFixtures,
   profileAccountCases,
 } from "@/data/profile";
+import {
+  publicPlatformFR,
+  publicPlatformSuites,
+  publicPlatformFixtures,
+  publicPlatformCases,
+} from "@/data/public-api";
+import {
+  userWorkspaceFR,
+  userWorkspaceSuites,
+  userWorkspaceFixtures,
+  userWorkspaceCases,
+} from "@/data/user-workspace";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
@@ -124,6 +136,18 @@ const bundles: SeedBundle[] = [
     suites: profileAccountSuites,
     fixtures: profileAccountFixtures,
     cases: profileAccountCases,
+  },
+  {
+    fr: publicPlatformFR,
+    suites: publicPlatformSuites,
+    fixtures: publicPlatformFixtures,
+    cases: publicPlatformCases,
+  },
+  {
+    fr: userWorkspaceFR,
+    suites: userWorkspaceSuites,
+    fixtures: userWorkspaceFixtures,
+    cases: userWorkspaceCases,
   },
 ];
 

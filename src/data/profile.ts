@@ -18,7 +18,7 @@ import { apiScript, BROWSER_ADMIN_LOGIN } from "./_admin-shared";
  *                          Admin Area (admin/superadmin only), Privacy Center,
  *                          Logout, plus credits + member-since meta.
  *
- * UI cases log in through the browser (WEBAPP_ADMIN_EMAIL / WEBAPP_PASSWORD
+ * UI cases log in through the browser (WEBAPP_ADMIN_EMAIL / WEBAPP_ADMIN_PASSWORD
  * — any real account works; the seeded test account is a superadmin, so the
  * Admin Area link is expected). API cases drive the user endpoints with
  * `t.request` and a cached bearer token. See _admin-shared.ts for auth + the

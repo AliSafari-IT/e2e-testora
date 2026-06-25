@@ -51,8 +51,14 @@ interface RunContextValue {
   runId: string | null;
   // Metadata about the active run: total number of TestCafe runs and a human label.
   runMeta: { totalRuns: number; label: string } | null;
+  // Unix timestamp when the active run started, exposed so the timer survives
+  // navigation (the provider lives in the root layout). Null when no run is active.
+  runStartTime: number | null;
   startRun: (target: RunTarget) => Promise<void>;
   rerunFailed: () => Promise<void>;
+  // Re-execute an explicit set of (fixture, case) pairs — the basis for
+  // re-running specific results selected on the Results page.
+  rerunCases: (cases: { fixtureId: string; caseId: string }[]) => Promise<void>;
   failedCaseCount: number;
   cancelRun: () => Promise<void>;
 }
@@ -101,6 +107,8 @@ const ENV_STORAGE_KEY = "e2e_run_environment";
 // Persist the environment a run was launched with, so a resumed run still shows
 // the correct target badge after a reload.
 const RUN_ENV_STORAGE_KEY = "e2e_active_run_environment";
+// Persist the active run start timestamp so the timer survives navigation and reloads.
+const RUN_START_TIME_KEY = "e2e_active_run_start_time";
 
 /**
  * Holds the run state and the live SSE connection. It lives in the root layout,
@@ -124,6 +132,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     totalRuns: number;
     label: string;
   } | null>(null);
+  const [runStartTime, setRunStartTime] = useState<number | null>(null);
   const esRef = useRef<EventSource | null>(null);
   // Guards the generic "connection closed" error that browsers fire right after
   // a normal stream completion, so it isn't mistaken for a stale/unknown run.
@@ -138,6 +147,27 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     setReports(null);
     setError(null);
     setRunMeta(null);
+
+    // Restore the run start timestamp from storage, or initialize it now so the
+    // timer keeps running across navigation and even page reloads.
+    const storedStart = (() => {
+      try {
+        return localStorage.getItem(RUN_START_TIME_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    if (storedStart) {
+      setRunStartTime(Number(storedStart));
+    } else {
+      const start = Date.now();
+      setRunStartTime(start);
+      try {
+        localStorage.setItem(RUN_START_TIME_KEY, String(start));
+      } catch {
+        /* ignore */
+      }
+    }
 
     const es = new EventSource(`/api/run/stream/${id}`);
     esRef.current = es;
@@ -155,11 +185,13 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       finishedRef.current = true;
       setReports(JSON.parse((event as MessageEvent<string>).data));
       setRunning(false);
+      setRunStartTime(null);
       es.close();
       // The run is over — drop the resume marker so a later reload doesn't try to
       // re-attach to (and replay) a finished run.
       try {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(RUN_START_TIME_KEY);
       } catch {
         /* ignore */
       }
@@ -174,9 +206,11 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
           setError("Run failed");
         }
         setRunning(false);
+        setRunStartTime(null);
         es.close();
         try {
           localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(RUN_START_TIME_KEY);
         } catch {
           /* ignore */
         }
@@ -190,10 +224,12 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         if (opts?.resuming) {
           try {
             localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(RUN_START_TIME_KEY);
           } catch {
             /* ignore */
           }
           setRunId(null);
+          setRunStartTime(null);
         }
       }
     });
@@ -290,8 +326,10 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     setRunning(false);
     setError("Run cancelled");
     setRunId(null);
+    setRunStartTime(null);
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(RUN_START_TIME_KEY);
     } catch {
       /* ignore */
     }
@@ -327,6 +365,15 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setReports(null);
       setLogs([]);
+      // Record the start timestamp in the provider so it survives navigation,
+      // and persist it for page reloads as well.
+      const start = Date.now();
+      setRunStartTime(start);
+      try {
+        localStorage.setItem(RUN_START_TIME_KEY, String(start));
+      } catch {
+        /* ignore */
+      }
       // Attach the selected base scope so the same run can target local or
       // production without any change to the test content.
       const envUsed: RunEnvironment = {
@@ -370,6 +417,12 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
               : JSON.stringify(data.error),
           );
           setRunning(false);
+          setRunStartTime(null);
+          try {
+            localStorage.removeItem(RUN_START_TIME_KEY);
+          } catch {
+            /* ignore */
+          }
           return;
         }
         try {
@@ -381,6 +434,12 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         setError(err instanceof Error ? err.message : "Run failed");
         setRunning(false);
+        setRunStartTime(null);
+        try {
+          localStorage.removeItem(RUN_START_TIME_KEY);
+        } catch {
+          /* ignore */
+        }
       }
     },
     [attach, environment, cancelActiveRun],
@@ -406,6 +465,25 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     await beginRun({ cases });
   }, [reports, beginRun]);
 
+  // Re-execute an explicit set of (fixture, case) pairs. Deduped so a case that
+  // appears several times (e.g. multiple runs) is only requested once.
+  const rerunCases = useCallback(
+    async (cases: { fixtureId: string; caseId: string }[]) => {
+      const seen = new Set<string>();
+      const deduped: { fixtureId: string; caseId: string }[] = [];
+      for (const { fixtureId: fid, caseId: cid } of cases) {
+        if (!fid || !cid) continue;
+        const key = `${fid}::${cid}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push({ fixtureId: fid, caseId: cid });
+      }
+      if (deduped.length === 0) return;
+      await beginRun({ cases: deduped });
+    },
+    [beginRun],
+  );
+
   const failedCaseCount = collectFailedCases(reports).length;
 
   return (
@@ -422,8 +500,10 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         error,
         runId,
         runMeta,
+        runStartTime,
         startRun,
         rerunFailed,
+        rerunCases,
         failedCaseCount,
         cancelRun,
       }}

@@ -183,6 +183,21 @@ function lastTestTitle(logs: string[]): string | null {
   return null;
 }
 
+/** Format a millisecond duration as "Xm Ys" or "Xh Ym Zs". */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${seconds}s`;
+}
+
 export function RunPanel() {
   const searchParams = useSearchParams();
   // Run state lives in RunProvider (mounted in the layout) so it survives
@@ -198,6 +213,7 @@ export function RunPanel() {
     reports,
     error,
     runMeta,
+    runStartTime,
     startRun,
     rerunFailed,
     failedCaseCount,
@@ -216,6 +232,7 @@ export function RunPanel() {
     text: string;
   } | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   // Re-fetch the three catalog lists (after mount, and after a re-seed) while
   // preserving the current selections.
@@ -375,6 +392,21 @@ export function RunPanel() {
     progressTotal > 0
       ? Math.min(100, (completedCases / progressTotal) * 100)
       : 0;
+
+  // Track elapsed wall time while a run is active so the progress card can
+  // show how long the current run has been running. The start timestamp is
+  // stored in the provider (which survives navigation) so the timer resumes
+  // from the correct value when the user returns to this page.
+  useEffect(() => {
+    if (runStartTime == null) {
+      setElapsedMs(0);
+      return;
+    }
+    const tick = () => setElapsedMs(Date.now() - runStartTime);
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [runStartTime]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
@@ -641,7 +673,10 @@ export function RunPanel() {
               size="lg"
             />
             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Running {runMeta?.label ?? scopeLabel}</span>
+              <span>
+                Running {runMeta?.label ?? scopeLabel}
+                {elapsedMs > 0 && ` · ${formatDuration(elapsedMs)}`}
+              </span>
               <span>{Math.round(progressPercent)}%</span>
             </div>
             {currentTestTitle && (

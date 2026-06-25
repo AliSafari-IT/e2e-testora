@@ -30,20 +30,25 @@ export const API_DEFAULT = "http://localhost:3234/api/v1";
 // credentials, logs in once (cached), and exposes auth* request helpers. The
 // `typeof run` guards keep it valid whether or not the case has runs[].
 export const ADMIN_HELPERS = [
-  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.WEBAPP_API_URL || '" + API_DEFAULT + "');",
+  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.WEBAPP_API_URL || '" +
+    API_DEFAULT +
+    "');",
   "const ADMIN_EMAIL = process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com';",
   "async function getToken() {",
   "  const cached = globalThis.__e2eAdminToken;",
   "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
-  "  let last = 0;",
+  "  let last = 0; let lastBody = '';",
   "  for (let i = 0; i < 4; i++) {",
-  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.WEBAPP_PASSWORD || '' } });",
-  "    last = login.status;",
+  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.WEBAPP_ADMIN_PASSWORD || '' } });",
+  "    last = login.status; try { lastBody = (typeof login.body === 'string' ? login.body : JSON.stringify(login.body)).slice(0, 200); } catch (e) { lastBody = ''; }",
   "    if (login.status === 200) { globalThis.__e2eAdminToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
   "    if (login.status === 429) { await t.wait(15000); continue; }",
   "    break;",
   "  }",
-  "  throw new Error('admin login did not succeed (last status ' + last + '). Check WEBAPP_PASSWORD and that the account exists.');",
+  // Surface *why* without leaking the secret: which email, whether a password
+  // env was loaded (length only), the API base, and the server's own message.
+  "  var pwInfo = process.env.WEBAPP_ADMIN_PASSWORD ? ('set, length ' + process.env.WEBAPP_ADMIN_PASSWORD.length) : 'MISSING';",
+  "  throw new Error('admin login failed (status ' + last + ') as ' + ADMIN_EMAIL + ' [password: ' + pwInfo + '] against ' + api + '. Server said: ' + lastBody + '. Set WEBAPP_ADMIN_EMAIL + WEBAPP_ADMIN_PASSWORD and ensure the account exists (and restart the dev server after editing .env).');",
   "}",
   "async function authReq(method, path, body) {",
   "  const tok = await getToken();",
@@ -93,7 +98,7 @@ export const BROWSER_ADMIN_LOGIN = [
   "const passwordInput = Selector('[data-testid=\"login-password\"]');",
   "const submitButton = Selector('[data-testid=\"login-submit\"]');",
   "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
-  "const password = process.env.WEBAPP_PASSWORD || '';",
+  "const password = process.env.WEBAPP_ADMIN_PASSWORD || '';",
   "for (let i = 0; i < 4; i++) {",
   "  await t.typeText(emailInput, ADMIN_EMAIL, { replace: true });",
   "  await t.typeText(passwordInput, password, { replace: true });",
@@ -112,8 +117,9 @@ export const BROWSER_ADMIN_LOGIN = [
   "  if (p.indexOf('/login') === -1) { loggedIn = true; break; }",
   "  await t.wait(1000);",
   "}",
-  "await t.expect(loggedIn).ok('admin login did not complete (still on /login) — check WEBAPP_PASSWORD / that the account exists.');",
-  "await t.wait(1500);",
+  "var __pwInfo = process.env.WEBAPP_ADMIN_PASSWORD ? ('set, length ' + process.env.WEBAPP_ADMIN_PASSWORD.length) : 'MISSING';",
+  "await t.expect(loggedIn).ok('admin login did not complete (still on /login) as ' + ADMIN_EMAIL + ' [password: ' + __pwInfo + ']. Set WEBAPP_ADMIN_EMAIL + WEBAPP_ADMIN_PASSWORD and ensure the account exists (and restart the dev server after editing .env).');",
+  "await t.wait(2500);",
   "",
 ].join("\n");
 
@@ -124,7 +130,11 @@ export const BROWSER_ADMIN_LOGIN = [
  * page content rendered — either a caller-supplied literal that survives i18n,
  * or, by default, any admin shell heading/table.
  */
-export function uiSmoke(path: string, literal?: string, superadminOnly = false): string {
+export function uiSmoke(
+  path: string,
+  literal?: string,
+  superadminOnly = false,
+): string {
   const contentAssert = literal
     ? "await t.expect(Selector('body').withText(" +
       JSON.stringify(literal) +
@@ -145,11 +155,21 @@ export function uiSmoke(path: string, literal?: string, superadminOnly = false):
       "let landed = false; let pathname = '';",
       "for (let i = 0; i < 30; i++) {",
       "  pathname = await t.eval(() => window.location.pathname);",
-      "  if (pathname.indexOf('/login') === -1 && pathname.indexOf('" + path + "') !== -1) { landed = true; break; }",
-      "  if (i === 8 && pathname.indexOf('" + path + "') === -1) { await t.navigateTo('" + path + "'); }",
+      "  if (pathname.indexOf('/login') === -1 && pathname.indexOf('" +
+        path +
+        "') !== -1) { landed = true; break; }",
+      "  if (i === 8 && pathname.indexOf('" +
+        path +
+        "') === -1) { await t.navigateTo('" +
+        path +
+        "'); }",
       "  await t.wait(1000);",
       "}",
-      "await t.expect(landed).ok('could not open " + path + " — ended at ' + pathname + '" + redirectHint + "');",
+      "await t.expect(landed).ok('could not open " +
+        path +
+        " — ended at ' + pathname + '" +
+        redirectHint +
+        "');",
       contentAssert,
       "",
     ].join("\n")
@@ -171,6 +191,8 @@ export interface AdminApiSpec {
   tolerant?: number[];
   /** Override the body assertion entirely with a custom JS snippet. */
   assertBody?: string;
+  /** Public endpoint: fetched with NO auth (200 expected), and no guard case. */
+  public?: boolean;
   /** Extra hand-written cases for this fixture (CRUD lifecycles, validation, …). */
   extraCases?: (fixtureId: string) => TestCaseDefinition[];
 }
@@ -216,28 +238,47 @@ export function adminGetCases(opts: {
   // an error body, not the success shape.
   const shapeAssert = spec.tolerant
     ? ""
-    : spec.assertBody ??
+    : (spec.assertBody ??
       (spec.shape === "list"
         ? "await t.expect(Array.isArray(res.body.data)).ok('expected body.data to be an array');"
         : spec.shape === "array"
           ? "await t.expect(Array.isArray(res.body)).ok('expected an array response');"
-          : "await t.expect(res.body !== undefined && res.body !== null).ok('expected a response body');");
+          : "await t.expect(res.body !== undefined && res.body !== null).ok('expected a response body');"));
+
+  // Public endpoints: fetch with no auth, expect 200, and skip the guard case.
+  if (spec.public) {
+    return [
+      {
+        caseId: `${idPrefix}-returns-data`,
+        fixtureId,
+        title: `${label} endpoint returns data (public)`,
+        scriptType: "scripted",
+        expected: {},
+        script: apiScript(`
+const res = await t.request.get(api + '${spec.path}', { headers: {} });
+${statusAssert}
+${shapeAssert}
+`),
+      },
+    ];
+  }
 
   return [
     {
       caseId: `${idPrefix}-returns-data`,
       fixtureId,
-      title: `${label} endpoint returns admin data`,
+      title: `${label} endpoint returns data`,
       scriptType: "scripted",
       expected: {},
       script: apiScript(`
 const res = await authGet('${spec.path}');
-if (res.status === 403) throw new Error('403 from ${base} — the test account is not admin/superadmin${guardHint}.');
+if (res.status === 403) throw new Error('403 from ${base} — the test account lacks access${guardHint}.');
 ${statusAssert}
 ${shapeAssert}
 `),
     },
     {
+      // Kept as "-requires-admin" for id stability across existing seeds.
       caseId: `${idPrefix}-requires-admin`,
       fixtureId,
       title: `${label} endpoint rejects unauthenticated requests`,
@@ -281,13 +322,19 @@ export interface ChapterBundle {
  * and/or UI fixture per page) and cases. Pages with rich behaviour can attach
  * `api.extraCases`; everything else gets the standard GET + guard + smoke set.
  */
-export function buildChapter(frId: string, pages: AdminPageSpec[]): ChapterBundle {
+export function buildChapter(
+  frId: string,
+  pages: AdminPageSpec[],
+  // Suite-id prefix. Defaults to "admin-" for the admin chapters; pass "" (and
+  // globally-unique page ids) for non-admin chapters so ids never collide.
+  suiteIdPrefix = "admin-",
+): ChapterBundle {
   const suites: TestSuiteDefinition[] = [];
   const fixtures: TestFixtureDefinition[] = [];
   const cases: TestCaseDefinition[] = [];
 
   for (const page of pages) {
-    const suiteId = `admin-${page.id}`;
+    const suiteId = `${suiteIdPrefix}${page.id}`;
     suites.push({
       suiteId,
       frId,
