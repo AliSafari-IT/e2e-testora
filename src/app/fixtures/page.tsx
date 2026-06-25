@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { FixtureCard } from "@/components/entities/fixture-card";
+import { CollapsibleFixtureForm } from "@/components/forms/collapsible-fixture-form";
 import { getTestFixtures, getTestSuites } from "@/lib/queries";
 
 export default async function FixturesPage() {
@@ -13,6 +14,8 @@ export default async function FixturesPage() {
         <h1 className="text-2xl font-semibold">Test Fixtures</h1>
         <p className="text-muted-foreground">Reusable environment setups shared by test cases.</p>
       </div>
+
+      <CollapsibleFixtureForm suiteOptions={suiteOptions} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {fixtures.map((fixture) => (

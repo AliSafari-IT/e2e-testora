@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { RequirementForm } from "@/components/forms/requirement-form";
+import { CollapsibleRequirementForm } from "@/components/forms/collapsible-requirement-form";
 import { RequirementCard } from "@/components/entities/requirement-card";
 import { getFunctionalRequirements } from "@/lib/queries";
 
@@ -15,15 +14,7 @@ export default async function RequirementsPage() {
         <p className="text-muted-foreground">High-level domains covered by your test suites.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add a functional requirement</CardTitle>
-          <CardDescription>A high-level domain, e.g. Authentication or Checkout.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <RequirementForm />
-        </CardContent>
-      </Card>
+      <CollapsibleRequirementForm />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {requirements.map((fr) => (

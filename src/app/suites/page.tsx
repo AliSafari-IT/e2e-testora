@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { SuiteCard } from "@/components/entities/suite-card";
+import { CollapsibleSuiteForm } from "@/components/forms/collapsible-suite-form";
 import { getTestSuites, getFunctionalRequirements } from "@/lib/queries";
 
 export default async function SuitesPage() {
@@ -13,6 +14,8 @@ export default async function SuitesPage() {
         <h1 className="text-2xl font-semibold">Test Suites</h1>
         <p className="text-muted-foreground">Groupings of related flows under each requirement.</p>
       </div>
+
+      <CollapsibleSuiteForm frOptions={frOptions} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {suites.map((suite) => (
