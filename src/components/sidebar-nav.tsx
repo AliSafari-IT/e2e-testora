@@ -77,13 +77,13 @@ export function SidebarNav() {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-border bg-card p-4 transition-transform duration-200 ease-out",
-          "md:static md:z-auto md:translate-x-0 md:bg-card/40 md:transition-none",
+          "md:static md:z-auto md:translate-x-0 md:bg-card md:transition-none",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="mb-6 flex items-center justify-between px-2">
           <div className="flex items-center gap-2">
-            <Logo className="h-8 w-8" />
+            <Logo className="h-7 w-7" />
             <span className="text-lg font-semibold">e2e-testora</span>
           </div>
           {/* Close button — drawer only. */}
