@@ -17,6 +17,8 @@ import {
   Terminal,
 } from "lucide-react";
 import { useRun, type RunScope, type RunEnvironment } from "@/components/run-provider";
+import { DomainBrandControl } from "@/components/run/domain-brand-control";
+import { hostFromUrl } from "@/lib/domain-logos";
 import { cn } from "@/lib/utils";
 
 interface FixtureSummary {
@@ -325,6 +327,10 @@ export function RunPanel() {
               </label>
             </div>
           )}
+
+          <div className="border-t border-border pt-3">
+            <DomainBrandControl host={hostFromUrl(environment.baseUrl) ?? "localhost"} disabled={running} />
+          </div>
         </CardContent>
       </Card>
 

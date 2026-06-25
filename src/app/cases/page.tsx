@@ -1,12 +1,30 @@
 export const dynamic = "force-dynamic";
 
-import { CaseCard } from "@/components/entities/case-card";
+import { CaseListView } from "@/components/entities/case-list";
 import { CollapsibleCaseForm } from "@/components/forms/collapsible-case-form";
-import { getTestCases, getTestFixtures } from "@/lib/queries";
+import { getTestCases, getTestFixtures, getLastResultByCase } from "@/lib/queries";
+import { singleResult } from "@/lib/run-status";
 
 export default async function CasesPage() {
-  const [cases, fixtures] = await Promise.all([getTestCases(), getTestFixtures()]);
+  const [cases, fixtures, lastByCase] = await Promise.all([
+    getTestCases(),
+    getTestFixtures(),
+    getLastResultByCase(),
+  ]);
   const fixtureOptions = fixtures.map((fixture) => ({ fixtureId: fixture.fixtureId, title: fixture.title }));
+
+  const items = cases.map((testCase) => ({
+    caseId: testCase.caseId,
+    fixtureId: testCase.fixtureId,
+    title: testCase.title,
+    scriptType: testCase.scriptType,
+    input: testCase.input,
+    runs: testCase.runs,
+    expected: testCase.expected,
+    script: testCase.script,
+    fixtureTitle: testCase.fixture?.title,
+    result: singleResult(lastByCase.get(testCase.caseId)),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -17,26 +35,7 @@ export default async function CasesPage() {
 
       <CollapsibleCaseForm fixtureOptions={fixtureOptions} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {cases.map((testCase) => (
-          <CaseCard
-            key={testCase.caseId}
-            testCase={{
-              caseId: testCase.caseId,
-              fixtureId: testCase.fixtureId,
-              title: testCase.title,
-              scriptType: testCase.scriptType,
-              input: testCase.input,
-              runs: testCase.runs,
-              expected: testCase.expected,
-              script: testCase.script,
-            }}
-            fixtureTitle={testCase.fixture?.title}
-            fixtureOptions={fixtureOptions}
-          />
-        ))}
-        {cases.length === 0 && <p className="text-muted-foreground">No test cases yet.</p>}
-      </div>
+      <CaseListView cases={items} fixtureOptions={fixtureOptions} />
     </div>
   );
 }

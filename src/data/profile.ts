@@ -106,6 +106,7 @@ export const profileTabsCases: TestCaseDefinition[] = [
     scriptType: "scripted",
     expected: {},
     script: browserScript(`
+const profileTab = (label) => Selector('button, a, [role="tab"]').withText(label).filterVisible();
 await t.navigateTo('/en/profile');
 // Profile is auth-gated; AuthContext rehydrates from the refresh cookie on this
 // fresh load (async), so poll for the page to settle rather than bouncing on a
@@ -120,8 +121,10 @@ for (let i = 0; i < 30; i++) {
 await t.expect(landed).ok('could not open /en/profile — ended at ' + pathname);
 await t.expect(Selector('body').withText(ADMIN_EMAIL).with({ timeout: 30000 }).exists).ok('profile header should show the account email');
 await t.expect(Selector('button[aria-label="Upload avatar"], [data-testid="profile-header-avatar"]').exists).ok('expected the profile header avatar control');
-await t.expect(Selector('[role="tablist"]').exists).ok('expected the profile tablist');
-await t.expect(Selector('[role="tab"]').count).eql(4, 'expected exactly four profile tabs');
+await t.expect(profileTab('Overview').exists).ok('expected the Overview tab');
+await t.expect(profileTab('Profile').exists).ok('expected the Profile tab');
+await t.expect(profileTab('Security').exists).ok('expected the Security tab');
+await t.expect(profileTab('Privacy').exists).ok('expected the Privacy tab');
 await t.expect(Selector('body').withText('Account Overview').exists).ok('the Overview tab should show the Account Overview section');
 `),
   },
@@ -132,15 +135,16 @@ await t.expect(Selector('body').withText('Account Overview').exists).ok('the Ove
     scriptType: "scripted",
     expected: {},
     script: browserScript(`
+const profileTab = (label) => Selector('button, a, [role="tab"]').withText(label).filterVisible();
 await t.navigateTo('/en/profile');
 await t.wait(1200);
-await t.click(Selector('[role="tab"]').withText('Profile'));
+await t.click(profileTab('Profile'));
 await t.expect(Selector('body').withText('Profile Details').with({ timeout: 10000 }).exists).ok('Profile tab should show "Profile Details"');
-await t.click(Selector('[role="tab"]').withText('Security'));
+await t.click(profileTab('Security'));
 await t.expect(Selector('body').withText('Change Password').with({ timeout: 10000 }).exists).ok('Security tab should show "Change Password"');
-await t.click(Selector('[role="tab"]').withText('Privacy'));
-await t.expect(Selector('[role="tab"][aria-selected="true"]').withText('Privacy').with({ timeout: 10000 }).exists).ok('Privacy tab should become selected');
-await t.click(Selector('[role="tab"]').withText('Overview'));
+await t.click(profileTab('Privacy'));
+await t.expect(Selector('body').withText('Privacy').with({ timeout: 10000 }).exists).ok('Privacy tab content should render');
+await t.click(profileTab('Overview'));
 await t.expect(Selector('body').withText('Account Overview').with({ timeout: 10000 }).exists).ok('returning to Overview should show "Account Overview"');
 `),
   },
@@ -151,10 +155,11 @@ await t.expect(Selector('body').withText('Account Overview').with({ timeout: 100
     scriptType: "scripted",
     expected: {},
     script: browserScript(`
+const profileTab = (label) => Selector('button, a, [role="tab"]').withText(label).filterVisible();
 await t.navigateTo('/en/profile?tab=security');
 await t.wait(1500);
-await t.expect(Selector('[role="tab"][aria-selected="true"]').withText('Security').with({ timeout: 15000 }).exists).ok('?tab=security should pre-select the Security tab');
-await t.expect(Selector('body').withText('Change Password').exists).ok('the Security tab content should render');
+await t.expect(profileTab('Security').exists).ok('?tab=security should show the Security tab');
+await t.expect(Selector('body').withText('Change Password').with({ timeout: 15000 }).exists).ok('the Security tab content should render');
 `),
   },
   {

@@ -149,10 +149,52 @@ function rowsTable(rows: ReportResultRow[]): string {
   </table>`;
 }
 
-export function buildHtmlReport(rows: ReportResultRow[], meta: ReportMeta): string {
+export interface ReportBrand {
+  host: string;
+  productName?: string;
+  productLogo?: string;
+  companyName?: string;
+  companyLogo?: string;
+}
+
+function brandCaption(brand: ReportBrand): string {
+  const product = brand.productName?.trim();
+  const company = brand.companyName?.trim();
+  if (product && company) return `${product}, a product of ${company}`;
+  if (product) return product;
+  if (company) return `A product of ${company}`;
+  return "";
+}
+
+function brandBlock(brand: ReportBrand): string {
+  const logos = [
+    brand.productLogo
+      ? `<img class="brand-logo product" src="${brand.productLogo}" alt="${escapeHtml(brand.productName || brand.host)}" />`
+      : "",
+    brand.companyLogo
+      ? `<img class="brand-logo company" src="${brand.companyLogo}" alt="${escapeHtml(brand.companyName || "")}" />`
+      : "",
+  ].join("");
+  const caption = brandCaption(brand);
+  if (!logos && !caption) return "";
+  return `<div class="brand-block">${logos ? `<div class="brand-logos">${logos}</div>` : ""}${
+    caption ? `<div class="brand-caption">${escapeHtml(caption)}</div>` : ""
+  }</div>`;
+}
+
+export function buildHtmlReport(
+  rows: ReportResultRow[],
+  meta: ReportMeta,
+  brands: ReportBrand[] = [],
+): string {
   const s = summarize(rows);
   const title = meta.title ?? "E2E Test Report";
   const groups = group(rows);
+
+  // Per-domain product + company branding, shown in the on-screen header AND a
+  // fixed print header so it repeats on every page of the printed/PDF document.
+  const brandsHtml = brands.map(brandBlock).join("");
+  const printHeader = `<div class="print-header"><span class="ph-brands">${brandsHtml}</span><span class="ph-title">${escapeHtml(title)}</span></div>`;
 
   const filtersBlock =
     meta.filters.length > 0
@@ -213,6 +255,13 @@ export function buildHtmlReport(rows: ReportResultRow[], meta: ReportMeta): stri
   header.report h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.01em; }
   header.report .sub { color: var(--muted); font-size: 13px; }
   .brand { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  .brand-area { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .brand-block { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .brand-logos { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { max-height: 44px; max-width: 160px; object-fit: contain; background: #fff; }
+  .brand-logo.company { max-height: 34px; opacity: 0.95; }
+  .brand-caption { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; }
+  .print-header { display: none; }
   .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 18px; }
   .stat { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
   .stat .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -248,16 +297,38 @@ export function buildHtmlReport(rows: ReportResultRow[], meta: ReportMeta): stri
   .pill.other { background: #fef3c7; color: #92400e; }
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: center; }
   @media (max-width: 720px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+  /* Repeat the domain logo(s) on every printed/PDF page. The top @page margin
+     reserves a band that the fixed header occupies, so content never overlaps. */
+  @media print {
+    @page { margin: 24mm 14mm 16mm; }
+    body { background: #fff; }
+    .print-header {
+      position: fixed; top: 0; left: 0; right: 0; height: 16mm;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 3mm 4mm; background: #fff; border-bottom: 2px solid var(--accent);
+    }
+    .print-header .ph-brands { display: flex; align-items: center; gap: 14px; }
+    .print-header .brand-block { flex-direction: row; align-items: center; gap: 8px; }
+    .print-header .brand-logos { gap: 8px; }
+    .print-header .brand-logo { max-height: 10mm; max-width: 38mm; }
+    .print-header .brand-logo.company { max-height: 8mm; }
+    .print-header .brand-caption { font-size: 9px; }
+    .print-header .ph-title { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .fixture, .stat { break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
+  ${printHeader}
   <div class="wrap">
     <header class="report">
       <div>
         <h1>${escapeHtml(title)}</h1>
         <div class="sub">Generated ${escapeHtml(fmtDateTime(meta.generatedAt))} · ${s.total} result(s)</div>
       </div>
-      <div class="brand">e2e-testora</div>
+      <div class="brand-area">
+        ${brandsHtml || '<span class="brand">e2e-testora</span>'}
+      </div>
     </header>
 
     <div class="summary">

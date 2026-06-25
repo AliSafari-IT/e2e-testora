@@ -58,6 +58,18 @@ export async function executeFixture(
   const testcafe = await createTestCafe();
   const results: TestRunResult[] = [];
 
+  // The origin this run executed against (already retargeted to the chosen base
+  // scope by the run route). Stored on each result so the catalog lists can show
+  // a domain badge next to the last pass/fail.
+  const targetBaseUrl = (() => {
+    try {
+      return fixture.baseUrl ? new URL(fixture.baseUrl).origin : null;
+    } catch {
+      return null;
+    }
+  })();
+  const resultDetails: Record<string, unknown> = targetBaseUrl ? { targetBaseUrl } : {};
+
   const logStream = new Writable({
     write(chunk, _encoding, callback) {
       if (options.onLog) {
@@ -122,7 +134,7 @@ export async function executeFixture(
         const caseId = titleToCaseId.get(title) ?? title;
         const errorMessage = test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
         results.push(
-          buildResult(caseId, test.failed ? "failed" : "passed", runIndex, test.durationMs, {}, errorMessage),
+          buildResult(caseId, test.failed ? "failed" : "passed", runIndex, test.durationMs, resultDetails, errorMessage),
         );
       }
     } else {
@@ -131,7 +143,7 @@ export async function executeFixture(
       const status = failedCount === 0 ? "passed" : "failed";
       const elapsed = Date.now() - startedAt;
       for (const testCase of cases) {
-        results.push(buildResult(testCase.caseId, status, null, elapsed, {}, null));
+        results.push(buildResult(testCase.caseId, status, null, elapsed, resultDetails, null));
       }
     }
   } finally {

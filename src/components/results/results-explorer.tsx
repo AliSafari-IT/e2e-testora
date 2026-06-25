@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Check, Copy, FileCode2, FileJson, Filter, Loader2, Trash2, X } from "lucide-react";
 import type { ReportResultRow } from "@/lib/queries";
-import { buildHtmlReport, buildJsonReport, dateStamp, summarize } from "@/lib/report";
+import { buildHtmlReport, buildJsonReport, dateStamp, summarize, type ReportBrand } from "@/lib/report";
 import { saveTextFile } from "@/lib/save-file";
+import { getDomainBrands, hostFromUrl } from "@/lib/domain-logos";
 
 interface Option {
   id: string;
@@ -30,6 +31,22 @@ function distinct(rows: ReportResultRow[], idKey: keyof ReportResultRow, titleKe
 function errorPreview(message: string): string {
   const firstLine = message.split("\n").find((l) => l.trim()) ?? message;
   return firstLine.length > 100 ? `${firstLine.slice(0, 100)}…` : firstLine;
+}
+
+/** The configured branding for the distinct domains present in the exported rows. */
+function brandsForRows(rows: ReportResultRow[]): ReportBrand[] {
+  const stored = getDomainBrands();
+  const hosts = new Set<string>();
+  for (const row of rows) {
+    const host = hostFromUrl(row.targetBaseUrl);
+    if (host) hosts.add(host);
+  }
+  const out: ReportBrand[] = [];
+  for (const host of hosts) {
+    const brand = stored[host];
+    if (brand) out.push({ host, ...brand });
+  }
+  return out;
 }
 
 const selectClass =
@@ -162,7 +179,10 @@ export function ResultsExplorer({ rows: initialRows }: { rows: ReportResultRow[]
     setBusy(kind);
     try {
       const meta = { generatedAt: new Date().toISOString(), filters };
-      const content = kind === "json" ? buildJsonReport(rowsToExport, meta) : buildHtmlReport(rowsToExport, meta);
+      const content =
+        kind === "json"
+          ? buildJsonReport(rowsToExport, meta)
+          : buildHtmlReport(rowsToExport, meta, brandsForRows(rowsToExport));
       const fallback = kind === "json" ? "test-results" : "test-report";
       const outcome = await saveTextFile(content, {
         suggestedName: `${fallback}_${dateStamp()}.${kind}`,

@@ -1,6 +1,36 @@
 import { db } from "@/db/client";
 import { functionalRequirements, testSuites, testFixtures, testCases, testResults } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
+import type { LastResult } from "@/lib/run-status";
+
+/**
+ * The most recent stored result per case (one row each), keyed by caseId. The
+ * target domain a run executed against is kept in the result `details`, so the
+ * Cases/Fixtures/Suites lists can show a domain badge alongside pass/fail.
+ */
+export async function getLastResultByCase(): Promise<Map<string, LastResult>> {
+  const rows = await db
+    .selectDistinctOn([testResults.caseId], {
+      caseId: testResults.caseId,
+      status: testResults.status,
+      createdAt: testResults.createdAt,
+      details: testResults.details,
+    })
+    .from(testResults)
+    .orderBy(testResults.caseId, desc(testResults.createdAt));
+
+  const map = new Map<string, LastResult>();
+  for (const row of rows) {
+    const createdAt = row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt);
+    const target = (row.details as Record<string, unknown> | null)?.targetBaseUrl;
+    map.set(row.caseId, {
+      status: row.status,
+      createdAt,
+      targetBaseUrl: typeof target === "string" ? target : null,
+    });
+  }
+  return map;
+}
 
 export async function getFunctionalRequirements() {
   return db.query.functionalRequirements.findMany({
@@ -112,6 +142,9 @@ export interface ReportResultRow {
   suiteTitle: string;
   frId: string;
   frTitle: string;
+  // The deployment origin this result ran against (e.g. http://localhost:3233),
+  // used to attach a per-domain logo to exported reports.
+  targetBaseUrl: string | null;
 }
 
 /**
@@ -134,8 +167,10 @@ export async function getResultsForReport(limit = 1000): Promise<ReportResultRow
     const fixture = row.case?.fixture;
     const suite = fixture?.suite;
     const fr = suite?.functionalRequirement;
+    const target = (row.details as Record<string, unknown> | null)?.targetBaseUrl;
     return {
       id: row.id,
+      targetBaseUrl: typeof target === "string" ? target : null,
       status: row.status,
       runIndex: row.runIndex,
       durationMs: row.durationMs,

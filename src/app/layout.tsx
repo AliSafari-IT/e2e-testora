@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { RunProvider } from "@/components/run-provider";
+import { ScrollNav } from "@/components/scroll-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SidebarNav />
           {/* pt accounts for the fixed mobile top bar (h-14); reset from md up. */}
           <main className="flex-1 overflow-y-auto p-8 pt-20 md:pt-8">{children}</main>
+          <ScrollNav />
         </RunProvider>
       </body>
     </html>

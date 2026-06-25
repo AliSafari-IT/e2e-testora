@@ -1,12 +1,44 @@
 export const dynamic = "force-dynamic";
 
-import { SuiteCard } from "@/components/entities/suite-card";
+import { SuiteListView } from "@/components/entities/suite-list";
 import { CollapsibleSuiteForm } from "@/components/forms/collapsible-suite-form";
-import { getTestSuites, getFunctionalRequirements } from "@/lib/queries";
+import {
+  getTestSuites,
+  getFunctionalRequirements,
+  getTestCases,
+  getLastResultByCase,
+} from "@/lib/queries";
+import { aggregateResults, type LastResult } from "@/lib/run-status";
 
 export default async function SuitesPage() {
-  const [suites, requirements] = await Promise.all([getTestSuites(), getFunctionalRequirements()]);
+  const [suites, requirements, cases, lastByCase] = await Promise.all([
+    getTestSuites(),
+    getFunctionalRequirements(),
+    getTestCases(),
+    getLastResultByCase(),
+  ]);
   const frOptions = requirements.map((fr) => ({ id: fr.id, title: fr.title }));
+
+  // Roll each suite's cases (via fixture → suite) into one suite-level verdict.
+  const resultsBySuite = new Map<string, LastResult[]>();
+  for (const testCase of cases) {
+    const result = lastByCase.get(testCase.caseId);
+    const suiteId = testCase.fixture?.suiteId;
+    if (!result || !suiteId) continue;
+    const bucket = resultsBySuite.get(suiteId) ?? [];
+    bucket.push(result);
+    resultsBySuite.set(suiteId, bucket);
+  }
+
+  const items = suites.map((suite) => ({
+    suiteId: suite.suiteId,
+    frId: suite.frId,
+    title: suite.title,
+    description: suite.description,
+    fixtureCount: suite.fixtures.length,
+    frTitle: suite.functionalRequirement?.title,
+    result: aggregateResults(resultsBySuite.get(suite.suiteId) ?? []),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -17,23 +49,7 @@ export default async function SuitesPage() {
 
       <CollapsibleSuiteForm frOptions={frOptions} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {suites.map((suite) => (
-          <SuiteCard
-            key={suite.suiteId}
-            suite={{
-              suiteId: suite.suiteId,
-              frId: suite.frId,
-              title: suite.title,
-              description: suite.description,
-              fixtureCount: suite.fixtures.length,
-            }}
-            frTitle={suite.functionalRequirement?.title}
-            frOptions={frOptions}
-          />
-        ))}
-        {suites.length === 0 && <p className="text-muted-foreground">No test suites yet.</p>}
-      </div>
+      <SuiteListView suites={items} frOptions={frOptions} />
     </div>
   );
 }

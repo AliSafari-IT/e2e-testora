@@ -1,12 +1,39 @@
 export const dynamic = "force-dynamic";
 
-import { FixtureCard } from "@/components/entities/fixture-card";
+import { FixtureListView } from "@/components/entities/fixture-list";
 import { CollapsibleFixtureForm } from "@/components/forms/collapsible-fixture-form";
-import { getTestFixtures, getTestSuites } from "@/lib/queries";
+import { getTestFixtures, getTestSuites, getTestCases, getLastResultByCase } from "@/lib/queries";
+import { aggregateResults, type LastResult } from "@/lib/run-status";
 
 export default async function FixturesPage() {
-  const [fixtures, suites] = await Promise.all([getTestFixtures(), getTestSuites()]);
+  const [fixtures, suites, cases, lastByCase] = await Promise.all([
+    getTestFixtures(),
+    getTestSuites(),
+    getTestCases(),
+    getLastResultByCase(),
+  ]);
   const suiteOptions = suites.map((suite) => ({ suiteId: suite.suiteId, title: suite.title }));
+
+  // Roll each fixture's cases' last results into one fixture-level verdict.
+  const resultsByFixture = new Map<string, LastResult[]>();
+  for (const testCase of cases) {
+    const result = lastByCase.get(testCase.caseId);
+    if (!result) continue;
+    const bucket = resultsByFixture.get(testCase.fixtureId) ?? [];
+    bucket.push(result);
+    resultsByFixture.set(testCase.fixtureId, bucket);
+  }
+
+  const items = fixtures.map((fixture) => ({
+    fixtureId: fixture.fixtureId,
+    suiteId: fixture.suiteId,
+    title: fixture.title,
+    baseUrl: fixture.baseUrl,
+    commonInput: fixture.commonInput ?? {},
+    caseCount: fixture.cases.length,
+    suiteTitle: fixture.suite?.title,
+    result: aggregateResults(resultsByFixture.get(fixture.fixtureId) ?? []),
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -17,24 +44,7 @@ export default async function FixturesPage() {
 
       <CollapsibleFixtureForm suiteOptions={suiteOptions} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {fixtures.map((fixture) => (
-          <FixtureCard
-            key={fixture.fixtureId}
-            fixture={{
-              fixtureId: fixture.fixtureId,
-              suiteId: fixture.suiteId,
-              title: fixture.title,
-              baseUrl: fixture.baseUrl,
-              commonInput: fixture.commonInput ?? {},
-              caseCount: fixture.cases.length,
-            }}
-            suiteTitle={fixture.suite?.title}
-            suiteOptions={suiteOptions}
-          />
-        ))}
-        {fixtures.length === 0 && <p className="text-muted-foreground">No test fixtures yet.</p>}
-      </div>
+      <FixtureListView fixtures={items} suiteOptions={suiteOptions} />
     </div>
   );
 }
