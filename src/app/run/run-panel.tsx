@@ -29,6 +29,7 @@ import {
   type RunEnvironment,
 } from "@/components/run-provider";
 import { DomainBrandControl } from "@/components/run/domain-brand-control";
+import { SavedTargetsControl } from "@/components/run/saved-targets-control";
 import { hostFromUrl } from "@/lib/domain-logos";
 import { cn } from "@/lib/utils";
 
@@ -486,6 +487,17 @@ export function RunPanel() {
               </label>
             </div>
           )}
+
+          <div className="border-t border-border pt-3">
+            <SavedTargetsControl
+              environment={environment}
+              disabled={running}
+              onApply={(env) => {
+                setEnvironment(env);
+                setEnvPresetId("custom");
+              }}
+            />
+          </div>
 
           <div className="border-t border-border pt-3">
             <DomainBrandControl
