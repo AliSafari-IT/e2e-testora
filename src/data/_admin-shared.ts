@@ -1,0 +1,340 @@
+import type {
+  TestCaseDefinition,
+  TestFixtureDefinition,
+  TestSuiteDefinition,
+} from "@/test-engine/types";
+
+/**
+ * Shared building blocks for the ImmoStory admin-console test suites.
+ *
+ * The admin area is organised into four chapters (mirroring the app's own
+ * sidebar groups in admin-menu.config.ts): Accounts & Billing, Media & Style
+ * Assets, System Operations and Platform Configuration. Each chapter is a
+ * functional requirement; each admin page is a suite. Pages get an API fixture
+ * (driving the role-guarded /admin endpoints directly with `t.request`) and/or
+ * a browser smoke fixture proving an admin can open the page.
+ *
+ * Auth model (see AdminController + admin-users.service): every /admin route is
+ * JWT-guarded and requires role ∈ {admin, superadmin}; a plain user/agent gets
+ * 403 and an anonymous request gets 401. Some pages are superadmin-only.
+ *
+ * Logins go through /auth/login (throttled 10/60s). The token is cached on
+ * globalThis per spec process, so each API fixture logs in once — but a browser
+ * smoke logs in too, so running a whole chapter at once does many logins.
+ * Prefer running a single suite/fixture while iterating.
+ */
+
+export const API_DEFAULT = "http://localhost:3234/api/v1";
+
+// Injected at the top of every API case: resolves the API root + admin
+// credentials, logs in once (cached), and exposes auth* request helpers. The
+// `typeof run` guards keep it valid whether or not the case has runs[].
+export const ADMIN_HELPERS = [
+  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.IMMOSTORY_API_URL || '" + API_DEFAULT + "');",
+  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
+  "async function getToken() {",
+  "  const cached = globalThis.__e2eAdminToken;",
+  "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
+  "  let last = 0;",
+  "  for (let i = 0; i < 4; i++) {",
+  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.IMMOSTORY_PASSWORD || '' } });",
+  "    last = login.status;",
+  "    if (login.status === 200) { globalThis.__e2eAdminToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
+  "    if (login.status === 429) { await t.wait(15000); continue; }",
+  "    break;",
+  "  }",
+  "  throw new Error('admin login did not succeed (last status ' + last + '). Check IMMOSTORY_PASSWORD and that the account exists.');",
+  "}",
+  "async function authReq(method, path, body) {",
+  "  const tok = await getToken();",
+  "  const opts = { headers: { Authorization: 'Bearer ' + tok } };",
+  "  if (body !== undefined) opts.body = body;",
+  "  return t.request[method](api + path, opts);",
+  "}",
+  "const authGet = (p) => authReq('get', p);",
+  "const authPost = (p, b) => authReq('post', p, b === undefined ? {} : b);",
+  "const authPut = (p, b) => authReq('put', p, b === undefined ? {} : b);",
+  "const authPatch = (p, b) => authReq('patch', p, b === undefined ? {} : b);",
+  "const authDelete = (p) => authReq('delete', p);",
+  "function uniqueEmail() { return 'asafarim+e2eadmin' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@gmail.com'; }",
+  "async function createTempUser(role) {",
+  "  const email = uniqueEmail();",
+  "  const res = await authPost('/admin/users', { email, password: 'TestPass123!', role: role || 'user' });",
+  "  if (res.status === 403) throw new Error('Creating users returned 403 — the test account (' + ADMIN_EMAIL + ') is not admin/superadmin.');",
+  "  await t.expect(res.status).eql(201, 'expected to create a temp user, got ' + res.status + ': ' + JSON.stringify(res.body));",
+  "  return res.body;",
+  "}",
+  "async function cleanup(userId) { try { await authDelete('/admin/users/' + userId); } catch (e) { /* best-effort */ } }",
+  "async function getAdminId() {",
+  "  if (globalThis.__e2eAdminId) return globalThis.__e2eAdminId;",
+  "  const res = await authGet('/admin/users?limit=1&q=' + encodeURIComponent(ADMIN_EMAIL));",
+  "  await t.expect(res.status).eql(200, 'listing users to resolve admin id failed (' + res.status + '). Is the account admin/superadmin?');",
+  "  const row = res.body && res.body.data && res.body.data[0];",
+  "  if (!row) throw new Error('could not resolve admin user id from /admin/users');",
+  "  globalThis.__e2eAdminId = row.id;",
+  "  return row.id;",
+  "}",
+  "",
+].join("\n");
+
+/** Compose an API case body: shared helpers + the case-specific logic. */
+export function apiScript(body: string): string {
+  return ADMIN_HELPERS + body.trim() + "\n";
+}
+
+// Hydration-gated browser login as the admin account, reused by every UI smoke.
+export const BROWSER_ADMIN_LOGIN = [
+  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
+  "await t.navigateTo('/en/login');",
+  "const emailInput = Selector('[data-testid=\"login-email\"]');",
+  "await t.expect(emailInput.with({ timeout: 30000 }).exists).ok('login form did not render');",
+  "const passwordInput = Selector('[data-testid=\"login-password\"]');",
+  "const submitButton = Selector('[data-testid=\"login-submit\"]');",
+  "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
+  "const password = process.env.IMMOSTORY_PASSWORD || '';",
+  "for (let i = 0; i < 4; i++) {",
+  "  await t.typeText(emailInput, ADMIN_EMAIL, { replace: true });",
+  "  await t.typeText(passwordInput, password, { replace: true });",
+  "  if ((await emailInput.value) === ADMIN_EMAIL && (await passwordInput.value) === password) break;",
+  "  await t.wait(1000);",
+  "}",
+  "await t.click(submitButton);",
+  "// A successful login establishes the session (an httpOnly refresh cookie) and",
+  "// redirects away from /login. That redirect — not the transient localStorage",
+  "// auth_token — is the reliable signal: AuthContext CLEARS auth_token on the",
+  "// next page load and re-authenticates from the refresh cookie. Wait for it so",
+  "// the cookie is fully set before any protected navigation.",
+  "let loggedIn = false;",
+  "for (let i = 0; i < 40; i++) {",
+  "  const p = await t.eval(() => window.location.pathname);",
+  "  if (p.indexOf('/login') === -1) { loggedIn = true; break; }",
+  "  await t.wait(1000);",
+  "}",
+  "await t.expect(loggedIn).ok('admin login did not complete (still on /login) — check IMMOSTORY_PASSWORD / that the account exists.');",
+  "await t.wait(1500);",
+  "",
+].join("\n");
+
+/**
+ * Browser smoke for one admin page: log in as admin, open the page and assert
+ * (a) we kept an authenticated session (not bounced to /login), (b) we were not
+ * redirected away from the page (proves admin/superadmin access) and (c) the
+ * page content rendered — either a caller-supplied literal that survives i18n,
+ * or, by default, any admin shell heading/table.
+ */
+export function uiSmoke(path: string, literal?: string, superadminOnly = false): string {
+  const contentAssert = literal
+    ? "await t.expect(Selector('body').withText(" +
+      JSON.stringify(literal) +
+      ").with({ timeout: 30000 }).exists).ok('expected to see ' + " +
+      JSON.stringify(literal) +
+      " + ' on the page');"
+    : "await t.expect(Selector('h1, h2, main, table, [role=\"main\"]').with({ timeout: 30000 }).exists).ok('expected the admin page content to render');";
+  const redirectHint = superadminOnly
+    ? " — this page is superadmin-only, so an admin-but-not-superadmin account is redirected."
+    : " — the account is likely not admin/superadmin.";
+  return (
+    BROWSER_ADMIN_LOGIN +
+    [
+      "await t.navigateTo('" + path + "');",
+      "// This is a fresh load, so AuthContext re-authenticates from the refresh",
+      "// cookie (async) before the route guard admits us — poll generously, and",
+      "// re-issue the navigation once if a transient guard bounce moved us away.",
+      "let landed = false; let pathname = '';",
+      "for (let i = 0; i < 30; i++) {",
+      "  pathname = await t.eval(() => window.location.pathname);",
+      "  if (pathname.indexOf('/login') === -1 && pathname.indexOf('" + path + "') !== -1) { landed = true; break; }",
+      "  if (i === 8 && pathname.indexOf('" + path + "') === -1) { await t.navigateTo('" + path + "'); }",
+      "  await t.wait(1000);",
+      "}",
+      "await t.expect(landed).ok('could not open " + path + " — ended at ' + pathname + '" + redirectHint + "');",
+      contentAssert,
+      "",
+    ].join("\n")
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Declarative page → suite/fixture/case builder                      */
+/* ------------------------------------------------------------------ */
+
+export interface AdminApiSpec {
+  /** GET path, may include a query string, e.g. "/admin/payments?limit=5". */
+  path: string;
+  /** Path without query for the anonymous-access test; defaults to path sans "?...". */
+  base?: string;
+  /** Expected body shape: list = {data:[...]}, array = [...], object = anything. */
+  shape?: "list" | "array" | "object";
+  /** Acceptable statuses for integration endpoints that may be unconfigured locally. */
+  tolerant?: number[];
+  /** Override the body assertion entirely with a custom JS snippet. */
+  assertBody?: string;
+  /** Extra hand-written cases for this fixture (CRUD lifecycles, validation, …). */
+  extraCases?: (fixtureId: string) => TestCaseDefinition[];
+}
+
+export interface AdminPageSpec {
+  /** Stable slug; becomes the suite id `admin-<id>` and case-id prefix. */
+  id: string;
+  title: string;
+  /** Localised page path, e.g. "/en/admin/payments". */
+  uiPath: string;
+  description?: string;
+  superadminOnly?: boolean;
+  /** Browser smoke: true (default, generic), false (skip), or a literal to assert. */
+  ui?: boolean | string;
+  api?: AdminApiSpec;
+}
+
+/** The standard pair of API cases for a GET endpoint: it works, and it's guarded. */
+export function adminGetCases(opts: {
+  fixtureId: string;
+  idPrefix: string;
+  label: string;
+  superadminOnly?: boolean;
+  spec: AdminApiSpec;
+}): TestCaseDefinition[] {
+  const { fixtureId, idPrefix, label, superadminOnly, spec } = opts;
+  const base = spec.base ?? spec.path.split("?")[0];
+  const guardHint = superadminOnly ? " (this endpoint is superadmin-only)" : "";
+
+  const statusAssert = spec.tolerant
+    ? "await t.expect(" +
+      JSON.stringify(spec.tolerant) +
+      ".indexOf(res.status) !== -1).ok('expected " +
+      base +
+      " to respond with one of " +
+      spec.tolerant.join("/") +
+      ", got ' + res.status);"
+    : "await t.expect(res.status).eql(200, 'expected 200 from " +
+      base +
+      ", got ' + res.status + ': ' + JSON.stringify(res.body).slice(0, 200));";
+
+  // Skip shape assertions for tolerant endpoints — a tolerated non-200 carries
+  // an error body, not the success shape.
+  const shapeAssert = spec.tolerant
+    ? ""
+    : spec.assertBody ??
+      (spec.shape === "list"
+        ? "await t.expect(Array.isArray(res.body.data)).ok('expected body.data to be an array');"
+        : spec.shape === "array"
+          ? "await t.expect(Array.isArray(res.body)).ok('expected an array response');"
+          : "await t.expect(res.body !== undefined && res.body !== null).ok('expected a response body');");
+
+  return [
+    {
+      caseId: `${idPrefix}-returns-data`,
+      fixtureId,
+      title: `${label} endpoint returns admin data`,
+      scriptType: "scripted",
+      expected: {},
+      script: apiScript(`
+const res = await authGet('${spec.path}');
+if (res.status === 403) throw new Error('403 from ${base} — the test account is not admin/superadmin${guardHint}.');
+${statusAssert}
+${shapeAssert}
+`),
+    },
+    {
+      caseId: `${idPrefix}-requires-admin`,
+      fixtureId,
+      title: `${label} endpoint rejects unauthenticated requests`,
+      scriptType: "scripted",
+      expected: {},
+      script: apiScript(`
+const res = await t.request.get(api + '${base}', { headers: {} });
+await t.expect([401, 403]).contains(res.status, 'expected ${base} to reject anonymous access, got ' + res.status);
+`),
+    },
+  ];
+}
+
+/** A single browser-smoke case for a page. */
+export function uiSmokeCase(opts: {
+  fixtureId: string;
+  caseId: string;
+  title: string;
+  path: string;
+  literal?: string;
+  superadminOnly?: boolean;
+}): TestCaseDefinition {
+  return {
+    caseId: opts.caseId,
+    fixtureId: opts.fixtureId,
+    title: opts.title,
+    scriptType: "scripted",
+    expected: {},
+    script: uiSmoke(opts.path, opts.literal, opts.superadminOnly),
+  };
+}
+
+export interface ChapterBundle {
+  suites: TestSuiteDefinition[];
+  fixtures: TestFixtureDefinition[];
+  cases: TestCaseDefinition[];
+}
+
+/**
+ * Expand a chapter's page table into suites (one per page), fixtures (an API
+ * and/or UI fixture per page) and cases. Pages with rich behaviour can attach
+ * `api.extraCases`; everything else gets the standard GET + guard + smoke set.
+ */
+export function buildChapter(frId: string, pages: AdminPageSpec[]): ChapterBundle {
+  const suites: TestSuiteDefinition[] = [];
+  const fixtures: TestFixtureDefinition[] = [];
+  const cases: TestCaseDefinition[] = [];
+
+  for (const page of pages) {
+    const suiteId = `admin-${page.id}`;
+    suites.push({
+      suiteId,
+      frId,
+      title: page.title,
+      description: page.description ?? `${page.title} admin page.`,
+    });
+
+    if (page.api) {
+      const fixtureId = `${suiteId}-api`;
+      fixtures.push({
+        fixtureId,
+        suiteId,
+        title: `${page.title} API`,
+        baseUrl: "/en/login",
+        commonInput: {},
+      });
+      cases.push(
+        ...adminGetCases({
+          fixtureId,
+          idPrefix: page.id,
+          label: page.title,
+          superadminOnly: page.superadminOnly,
+          spec: page.api,
+        }),
+      );
+      if (page.api.extraCases) cases.push(...page.api.extraCases(fixtureId));
+    }
+
+    if (page.ui !== false) {
+      const fixtureId = `${suiteId}-ui`;
+      fixtures.push({
+        fixtureId,
+        suiteId,
+        title: `${page.title} page`,
+        baseUrl: page.uiPath,
+        commonInput: {},
+      });
+      cases.push(
+        uiSmokeCase({
+          fixtureId,
+          caseId: `${page.id}-page-loads`,
+          title: `Admin can open the ${page.title} page`,
+          path: page.uiPath,
+          literal: typeof page.ui === "string" ? page.ui : undefined,
+          superadminOnly: page.superadminOnly,
+        }),
+      );
+    }
+  }
+
+  return { suites, fixtures, cases };
+}

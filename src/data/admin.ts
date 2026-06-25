@@ -4,10 +4,20 @@ import type {
   TestFixtureDefinition,
   TestCaseDefinition,
 } from "@/test-engine/types";
+import {
+  apiScript,
+  uiSmoke,
+  buildChapter,
+  type AdminPageSpec,
+} from "./_admin-shared";
 
 /**
- * Admin console coverage for ImmoStory — the four account/credit management
- * pages:
+ * Accounts & Billing — the first admin chapter. The four account/credit pages
+ * get deep, hand-written coverage; the remaining billing pages (Payments,
+ * RevenueCat, Pricing, Promo Codes, E-Invoicing, Accounting) get the standard
+ * GET-endpoint + access-control + browser-smoke set via buildChapter().
+ *
+ * The four hand-written pages:
  *
  *   /en/admin/users    — every account (no role filter)   → AdminAccountsCrud "users"
  *   /en/admin/clients  — customers (role 'user')           → AdminAccountsCrud "clients"
@@ -38,146 +48,42 @@ import type {
  * (delta in → balance out) so they never depend on the exact starter balance.
  */
 
-const API_DEFAULT = "http://localhost:3234/api/v1";
-
-// Shared preamble injected at the top of every API case. Resolves the API
-// root + admin credentials, logs in once (cached), and exposes auth* request
-// helpers. `typeof run` guards keep it valid in both scripted-with-runs and
-// scripted-without-runs cases (where `run` is undeclared).
-const ADMIN_HELPERS = [
-  "const api = (typeof run !== 'undefined' && run && run.apiUrl) ? run.apiUrl : (process.env.IMMOSTORY_API_URL || '" + API_DEFAULT + "');",
-  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
-  "async function getToken() {",
-  "  // JWTs expire in ~15 min; the dev server is long-lived and globalThis",
-  "  // persists across the cases in this spec, so cache with a sub-expiry TTL.",
-  "  const cached = globalThis.__e2eAdminToken;",
-  "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
-  "  let last = 0;",
-  "  for (let i = 0; i < 4; i++) {",
-  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.IMMOSTORY_PASSWORD || '' } });",
-  "    last = login.status;",
-  "    if (login.status === 200) { globalThis.__e2eAdminToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
-  "    if (login.status === 429) { await t.wait(15000); continue; }",
-  "    break;",
-  "  }",
-  "  throw new Error('admin login did not succeed (last status ' + last + '). Check IMMOSTORY_PASSWORD and that the account exists.');",
-  "}",
-  "async function authReq(method, path, body) {",
-  "  const tok = await getToken();",
-  "  const opts = { headers: { Authorization: 'Bearer ' + tok } };",
-  "  if (body !== undefined) opts.body = body;",
-  "  return t.request[method](api + path, opts);",
-  "}",
-  "const authGet = (p) => authReq('get', p);",
-  "const authPost = (p, b) => authReq('post', p, b === undefined ? {} : b);",
-  "const authPatch = (p, b) => authReq('patch', p, b === undefined ? {} : b);",
-  "const authDelete = (p) => authReq('delete', p);",
-  "function uniqueEmail() { return 'asafarim+e2eadmin' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@gmail.com'; }",
-  "async function createTempUser(role) {",
-  "  const email = uniqueEmail();",
-  "  const res = await authPost('/admin/users', { email, password: 'TestPass123!', role: role || 'user' });",
-  "  if (res.status === 403) throw new Error('Creating users returned 403 — the test account (' + ADMIN_EMAIL + ') is not admin/superadmin.');",
-  "  await t.expect(res.status).eql(201, 'expected to create a temp user, got ' + res.status + ': ' + JSON.stringify(res.body));",
-  "  return res.body;",
-  "}",
-  "async function cleanup(userId) { try { await authDelete('/admin/users/' + userId); } catch (e) { /* best-effort */ } }",
-  "async function getAdminId() {",
-  "  if (globalThis.__e2eAdminId) return globalThis.__e2eAdminId;",
-  "  const res = await authGet('/admin/users?limit=1&q=' + encodeURIComponent(ADMIN_EMAIL));",
-  "  await t.expect(res.status).eql(200, 'listing users to resolve admin id failed (' + res.status + '). Is the account admin/superadmin?');",
-  "  const row = res.body && res.body.data && res.body.data[0];",
-  "  if (!row) throw new Error('could not resolve admin user id from /admin/users');",
-  "  globalThis.__e2eAdminId = row.id;",
-  "  return row.id;",
-  "}",
-  "",
-].join("\n");
-
-/** Compose an API case body: shared helpers + the case-specific logic. */
-function apiScript(body: string): string {
-  return ADMIN_HELPERS + body.trim() + "\n";
-}
-
-// Hydration-gated browser login as the admin account, reused by every UI smoke.
-// Mirrors the login traps handled across the other ImmoStory suites.
-const BROWSER_ADMIN_LOGIN = [
-  "const ADMIN_EMAIL = process.env.IMMOSTORY_ADMIN_EMAIL || 'asafarim@gmail.com';",
-  "await t.navigateTo('/en/login');",
-  "const emailInput = Selector('[data-testid=\"login-email\"]');",
-  "await t.expect(emailInput.with({ timeout: 30000 }).exists).ok('login form did not render');",
-  "const passwordInput = Selector('[data-testid=\"login-password\"]');",
-  "const submitButton = Selector('[data-testid=\"login-submit\"]');",
-  "await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
-  "const password = process.env.IMMOSTORY_PASSWORD || '';",
-  "for (let i = 0; i < 4; i++) {",
-  "  await t.typeText(emailInput, ADMIN_EMAIL, { replace: true });",
-  "  await t.typeText(passwordInput, password, { replace: true });",
-  "  if ((await emailInput.value) === ADMIN_EMAIL && (await passwordInput.value) === password) break;",
-  "  await t.wait(1000);",
-  "}",
-  "await t.click(submitButton);",
-  "let authed = false;",
-  "for (let i = 0; i < 30; i++) { if (await t.eval(() => !!localStorage.getItem('auth_token'))) { authed = true; break; } await t.wait(1000); }",
-  "await t.expect(authed).ok('admin browser login did not establish a session — check IMMOSTORY_PASSWORD.');",
-  "",
-].join("\n");
-
-/**
- * One browser smoke per admin page: log in as admin, open the page and assert
- * (a) we were NOT bounced to /dashboard (proves admin access) and (b) the data
- * table rendered, plus a literal on-page string that survives i18n.
- */
-function uiSmoke(path: string, literal: string): string {
-  return (
-    BROWSER_ADMIN_LOGIN +
-    [
-      "await t.navigateTo('" + path + "');",
-      "await t.wait(1500);",
-      "const pathname = await t.eval(() => window.location.pathname);",
-      "await t.expect(pathname).contains('" + path + "', 'expected to stay on " + path + " — redirected to ' + pathname + ', so the account is likely not admin/superadmin.');",
-      "await t.expect(Selector('table').with({ timeout: 30000 }).exists).ok('the admin data table did not render on " + path + "');",
-      "await t.expect(Selector('body').withText(" + JSON.stringify(literal) + ").exists).ok('expected to see ' + " + JSON.stringify(literal) + " + ' on the page');",
-      "",
-    ].join("\n")
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Functional requirement + suites                                    */
 /* ------------------------------------------------------------------ */
 
-export const adminConsoleFR: FunctionalRequirementDefinition = {
-  id: "admin-console",
-  title: "Admin console",
+export const accountsBillingFR: FunctionalRequirementDefinition = {
+  id: "accounts-billing",
+  title: "Admin · Accounts & Billing",
   description:
-    "Account and credit administration: the Users, Clients, Agents and Credits pages over the role-guarded /admin API.",
+    "Accounts and billing administration: Users, Clients, Agents, Credits, Payments, RevenueCat, Pricing, Promo Codes, E-Invoicing and Accounting.",
   baseUrl: "http://localhost:3233",
 };
 
 export const adminUsersSuite: TestSuiteDefinition = {
   suiteId: "admin-users",
-  frId: "admin-console",
+  frId: "accounts-billing",
   title: "Admin · Users",
   description: "All accounts: listing, search, filtering, creation and lifecycle, plus access control.",
 };
 
 export const adminClientsSuite: TestSuiteDefinition = {
   suiteId: "admin-clients",
-  frId: "admin-console",
+  frId: "accounts-billing",
   title: "Admin · Clients",
   description: "Customer accounts (role 'user') — the role-scoped view of the accounts surface.",
 };
 
 export const adminAgentsSuite: TestSuiteDefinition = {
   suiteId: "admin-agents",
-  frId: "admin-console",
+  frId: "accounts-billing",
   title: "Admin · Agents",
   description: "Agent accounts (role 'agent') — role-scoped listing plus agent creation.",
 };
 
 export const adminCreditsSuite: TestSuiteDefinition = {
   suiteId: "admin-credits",
-  frId: "admin-console",
+  frId: "accounts-billing",
   title: "Admin · Credits",
   description: "Credit grants and adjustments, validation limits, and the global grant history.",
 };
@@ -586,17 +492,72 @@ export const adminCreditsUiCases: TestCaseDefinition[] = [
 ];
 
 /* ------------------------------------------------------------------ */
+/* Remaining billing pages (standard GET + access + smoke set)        */
+/* ------------------------------------------------------------------ */
+
+const billingPages: AdminPageSpec[] = [
+  {
+    id: "payments",
+    title: "Payments",
+    uiPath: "/en/admin/payments",
+    description: "Payment transactions: list, filter and reconcile Stripe charges.",
+    api: { path: "/admin/payments?limit=5", shape: "list" },
+  },
+  {
+    id: "revenuecat",
+    title: "RevenueCat",
+    uiPath: "/en/admin/revenuecat",
+    description: "Subscription metrics and subscribers sourced from RevenueCat.",
+    // Metrics call the RevenueCat API, which may be unconfigured locally.
+    api: { path: "/admin/revenuecat/metrics", shape: "object", tolerant: [200, 500, 502, 503] },
+  },
+  {
+    id: "pricing",
+    title: "Pricing",
+    uiPath: "/en/admin/pricing",
+    description: "Pricing plan catalog shown on the marketing site.",
+    api: { path: "/admin/content/pricing-plans", shape: "list" },
+  },
+  {
+    id: "promo-codes",
+    title: "Promo Codes",
+    uiPath: "/en/admin/promo-codes",
+    description: "Discount/promo code management.",
+    api: { path: "/admin/promo-codes?limit=5", shape: "list" },
+  },
+  {
+    // No clean admin list endpoint backs this page — browser smoke only.
+    id: "e-invoicing",
+    title: "E-Invoicing",
+    uiPath: "/en/admin/e-invoicing",
+    description: "Peppol e-invoicing transmission status.",
+  },
+  {
+    id: "accounting",
+    title: "Accounting",
+    uiPath: "/en/admin/accounting",
+    description: "Bookkeeping module (status, providers, ledger). PIN-gated beyond status.",
+    superadminOnly: true,
+    // /accounting/status has no PIN guard, so it is safe to probe for access.
+    api: { path: "/accounting/status", shape: "object" },
+  },
+];
+
+const billing = buildChapter("accounts-billing", billingPages);
+
+/* ------------------------------------------------------------------ */
 /* Aggregates for the seeder                                          */
 /* ------------------------------------------------------------------ */
 
-export const adminConsoleSuites: TestSuiteDefinition[] = [
+export const accountsBillingSuites: TestSuiteDefinition[] = [
   adminUsersSuite,
   adminClientsSuite,
   adminAgentsSuite,
   adminCreditsSuite,
+  ...billing.suites,
 ];
 
-export const adminConsoleFixtures: TestFixtureDefinition[] = [
+export const accountsBillingFixtures: TestFixtureDefinition[] = [
   adminUsersApiFixture,
   adminUsersUiFixture,
   adminClientsApiFixture,
@@ -605,9 +566,10 @@ export const adminConsoleFixtures: TestFixtureDefinition[] = [
   adminAgentsUiFixture,
   adminCreditsApiFixture,
   adminCreditsUiFixture,
+  ...billing.fixtures,
 ];
 
-export const adminConsoleCases: TestCaseDefinition[] = [
+export const accountsBillingCases: TestCaseDefinition[] = [
   ...adminUsersApiCases,
   ...adminUsersUiCases,
   ...adminClientsApiCases,
@@ -616,4 +578,5 @@ export const adminConsoleCases: TestCaseDefinition[] = [
   ...adminAgentsUiCases,
   ...adminCreditsApiCases,
   ...adminCreditsUiCases,
+  ...billing.cases,
 ];

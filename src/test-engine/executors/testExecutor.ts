@@ -21,6 +21,30 @@ export interface ExecuteFixtureOptions {
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 
+// Chrome flags that make headless launches reliable when TestCafe runs *inside*
+// the Next.js dev server process (shared event loop, sandboxing, no /dev/shm on
+// some hosts). Harmless on a normal desktop, and they prevent the most common
+// "Cannot establish browser connection" launch failures.
+const HEADLESS_CHROME = "chrome:headless --no-sandbox --disable-gpu --disable-dev-shm-usage";
+
+/**
+ * The browser string TestCafe should drive. Defaults to a hardened headless
+ * Chrome, but is fully overridable for debugging:
+ *   E2E_BROWSER="chrome:headless --some-flag"  → use this verbatim
+ *   E2E_HEADFUL=1                              → run a visible Chrome window
+ */
+function resolveBrowser(options: ExecuteFixtureOptions): string {
+  if (options.browser) return options.browser;
+  if (process.env.E2E_BROWSER) return process.env.E2E_BROWSER;
+  if (options.headless === false || process.env.E2E_HEADFUL === "1") return "chrome";
+  return HEADLESS_CHROME;
+}
+
+// How long TestCafe waits for the browser to connect back. The default (2 min)
+// is too low when the dev server's event loop is busy compiling routes while
+// Chrome is starting; allow a generous default and an env override.
+const BROWSER_INIT_TIMEOUT = Number(process.env.E2E_BROWSER_INIT_TIMEOUT) || 300_000;
+
 export async function executeFixture(
   fixture: TestFixtureDefinition,
   cases: TestCaseDefinition[],
@@ -51,7 +75,7 @@ export async function executeFixture(
     const runner = testcafe.createRunner();
     abortHandler = () => { Promise.resolve(runner.stop()).catch(() => { /* suppress WebSocket close noise on cancel */ }); };
     options.signal?.addEventListener("abort", abortHandler);
-    const browser = options.browser ?? (options.headless === false ? "chrome" : "chrome:headless");
+    const browser = resolveBrowser(options);
     const startedAt = Date.now();
     // Capture per-test outcomes (name, duration, formatted errors) alongside the
     // human-readable spec stream, so stored results carry the *same* error text
@@ -77,6 +101,10 @@ export async function executeFixture(
           // per-selector timeouts in the test scripts themselves.
           pageLoadTimeout: 60000,
           ajaxRequestTimeout: 60000,
+          // Tolerate a slow browser handshake when the dev server's event loop
+          // is busy. The default 2 min is what surfaces as "Cannot establish
+          // browser connection".
+          browserInitTimeout: BROWSER_INIT_TIMEOUT,
         });
     } catch (runErr) {
       // When the run is cancelled via runner.stop(), TestCafe / chrome-remote-interface
@@ -294,6 +322,45 @@ export async function loadSuiteRunPlan(suiteId: string): Promise<RunPlan | null>
       cases: fixtureRow.cases.map(mapCaseRow),
     })),
   };
+}
+
+/**
+ * Build a run plan from an explicit set of (fixture, case) selections — the
+ * basis for "rerun failed". The selections may span any number of fixtures and
+ * suites (whatever scope the original run covered); they are grouped per
+ * fixture, deduped, and any ids no longer present are silently skipped.
+ */
+export async function loadSelectionRunPlan(
+  selections: { fixtureId: string; caseId: string }[],
+): Promise<RunPlan | null> {
+  const caseIdsByFixture = new Map<string, Set<string>>();
+  for (const { fixtureId, caseId } of selections) {
+    const set = caseIdsByFixture.get(fixtureId) ?? new Set<string>();
+    set.add(caseId);
+    caseIdsByFixture.set(fixtureId, set);
+  }
+
+  const units: RunUnit[] = [];
+  for (const [fixtureId, caseIds] of caseIdsByFixture) {
+    const fixtureRow = await db.query.testFixtures.findFirst({
+      where: eq(testFixtures.fixtureId, fixtureId),
+      with: { suite: { with: { functionalRequirement: true } }, cases: true },
+    });
+    if (!fixtureRow) continue;
+
+    const cases = fixtureRow.cases.filter((row) => caseIds.has(row.caseId)).map(mapCaseRow);
+    if (cases.length === 0) continue;
+
+    units.push({
+      suiteTitle: fixtureRow.suite?.title ?? fixtureRow.suiteId,
+      fixture: mapFixtureRow(fixtureRow, fixtureRow.suite?.functionalRequirement?.baseUrl),
+      cases,
+    });
+  }
+
+  if (units.length === 0) return null;
+  const total = units.reduce((sum, unit) => sum + unit.cases.length, 0);
+  return { label: `${total} selected case(s)`, units };
 }
 
 /** Build a run plan covering every fixture across every suite of a requirement. */

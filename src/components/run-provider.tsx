@@ -12,6 +12,8 @@ import {
 export interface ReportEntry {
   suite: string;
   fixture: string;
+  fixtureId: string;
+  caseId: string;
   case: string;
   status: string;
   details: Record<string, unknown>;
@@ -35,6 +37,8 @@ interface RunContextValue {
   error: string | null;
   runId: string | null;
   startRun: (target: RunTarget) => Promise<void>;
+  rerunFailed: () => Promise<void>;
+  failedCaseCount: number;
   cancelRun: () => Promise<void>;
 }
 
@@ -44,6 +48,27 @@ const SCOPE_BODY_KEY: Record<RunScope, "fixtureId" | "suiteId" | "frId"> = {
   suite: "suiteId",
   requirement: "frId",
 };
+
+/**
+ * The unique (fixture, case) pairs that did not pass in a result set. Deduped
+ * across multi-run cases (one entry per result) so a case is rerun once even if
+ * several of its runs failed. Entries missing ids (e.g. an older run) are
+ * skipped so they never produce an unrunnable request.
+ */
+function collectFailedCases(reports: ReportEntry[] | null): { fixtureId: string; caseId: string }[] {
+  if (!reports) return [];
+  const seen = new Set<string>();
+  const out: { fixtureId: string; caseId: string }[] = [];
+  for (const report of reports) {
+    if (report.status === "passed") continue;
+    if (!report.fixtureId || !report.caseId) continue;
+    const key = `${report.fixtureId}::${report.caseId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ fixtureId: report.fixtureId, caseId: report.caseId });
+  }
+  return out;
+}
 
 const RunContext = createContext<RunContextValue | null>(null);
 
@@ -147,9 +172,9 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }, [runId]);
 
-  const startRun = useCallback(
-    async (target: RunTarget) => {
-      if (!target.id) return;
+  // Shared launcher: POST a run request body, then attach to its stream.
+  const beginRun = useCallback(
+    async (body: Record<string, unknown>) => {
       setRunning(true);
       setError(null);
       setReports(null);
@@ -158,7 +183,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [SCOPE_BODY_KEY[target.scope]]: target.id }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -180,6 +205,24 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     [attach],
   );
 
+  const startRun = useCallback(
+    async (target: RunTarget) => {
+      if (!target.id) return;
+      await beginRun({ [SCOPE_BODY_KEY[target.scope]]: target.id });
+    },
+    [beginRun],
+  );
+
+  // Re-execute just the cases that didn't pass in the current result set —
+  // works for any prior scope, since it re-targets the cases by id.
+  const rerunFailed = useCallback(async () => {
+    const cases = collectFailedCases(reports);
+    if (cases.length === 0) return;
+    await beginRun({ cases });
+  }, [reports, beginRun]);
+
+  const failedCaseCount = collectFailedCases(reports).length;
+
   return (
     <RunContext.Provider
       value={{
@@ -191,6 +234,8 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         error,
         runId,
         startRun,
+        rerunFailed,
+        failedCaseCount,
         cancelRun,
       }}
     >

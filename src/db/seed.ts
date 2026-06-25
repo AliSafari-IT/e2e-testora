@@ -33,11 +33,35 @@ import {
   registrationTestCases,
 } from "@/data/registration";
 import {
-  adminConsoleFR,
-  adminConsoleSuites,
-  adminConsoleFixtures,
-  adminConsoleCases,
+  accountsBillingFR,
+  accountsBillingSuites,
+  accountsBillingFixtures,
+  accountsBillingCases,
 } from "@/data/admin";
+import {
+  mediaAssetsFR,
+  mediaAssetsSuites,
+  mediaAssetsFixtures,
+  mediaAssetsCases,
+} from "@/data/admin-media";
+import {
+  systemOpsFR,
+  systemOpsSuites,
+  systemOpsFixtures,
+  systemOpsCases,
+} from "@/data/admin-system";
+import {
+  platformConfigFR,
+  platformConfigSuites,
+  platformConfigFixtures,
+  platformConfigCases,
+} from "@/data/admin-platform";
+import {
+  profileAccountFR,
+  profileAccountSuites,
+  profileAccountFixtures,
+  profileAccountCases,
+} from "@/data/profile";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
@@ -72,10 +96,34 @@ const bundles: SeedBundle[] = [
     cases: registrationTestCases,
   },
   {
-    fr: adminConsoleFR,
-    suites: adminConsoleSuites,
-    fixtures: adminConsoleFixtures,
-    cases: adminConsoleCases,
+    fr: accountsBillingFR,
+    suites: accountsBillingSuites,
+    fixtures: accountsBillingFixtures,
+    cases: accountsBillingCases,
+  },
+  {
+    fr: mediaAssetsFR,
+    suites: mediaAssetsSuites,
+    fixtures: mediaAssetsFixtures,
+    cases: mediaAssetsCases,
+  },
+  {
+    fr: systemOpsFR,
+    suites: systemOpsSuites,
+    fixtures: systemOpsFixtures,
+    cases: systemOpsCases,
+  },
+  {
+    fr: platformConfigFR,
+    suites: platformConfigSuites,
+    fixtures: platformConfigFixtures,
+    cases: platformConfigCases,
+  },
+  {
+    fr: profileAccountFR,
+    suites: profileAccountSuites,
+    fixtures: profileAccountFixtures,
+    cases: profileAccountCases,
   },
 ];
 

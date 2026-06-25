@@ -57,3 +57,15 @@ export function failRun(runId: string, error: string): void {
 export function getRun(runId: string): RunRecord | undefined {
   return runs.get(runId);
 }
+
+/**
+ * Whether a run is currently executing. Used to reject overlapping runs —
+ * two TestCafe instances launching browsers in the same process at once is a
+ * common cause of "Cannot establish browser connection".
+ */
+export function hasActiveRun(): boolean {
+  for (const run of runs.values()) {
+    if (!run.done) return true;
+  }
+  return false;
+}

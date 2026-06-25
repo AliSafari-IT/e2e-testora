@@ -54,6 +54,10 @@ export interface TestRunResult {
 export interface FormattedReport {
   suite: string;
   fixture: string;
+  // Stable ids alongside the human titles, so a client can re-target exactly
+  // these cases (e.g. "rerun failed") regardless of the original run's scope.
+  fixtureId: string;
+  caseId: string;
   case: string;
   status: TestStatus;
   details: Record<string, unknown>;

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Copy, Loader2, PlayCircle, StopCircle, Terminal } from "lucide-react";
+import { Check, Copy, Loader2, PlayCircle, RotateCcw, StopCircle, Terminal } from "lucide-react";
 import { useRun, type RunScope } from "@/components/run-provider";
 import { cn } from "@/lib/utils";
 
@@ -61,8 +61,18 @@ export function RunPanel() {
   const searchParams = useSearchParams();
   // Run state lives in RunProvider (mounted in the layout) so it survives
   // navigating to other routes while a run is in progress.
-  const { selectedFixtureId, setSelectedFixtureId, running, logs, reports, error, startRun, cancelRun } =
-    useRun();
+  const {
+    selectedFixtureId,
+    setSelectedFixtureId,
+    running,
+    logs,
+    reports,
+    error,
+    startRun,
+    rerunFailed,
+    failedCaseCount,
+    cancelRun,
+  } = useRun();
   const [scope, setScope] = useState<RunScope>("fixture");
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
   const [suites, setSuites] = useState<SuiteSummary[]>([]);
@@ -254,21 +264,50 @@ export function RunPanel() {
       {reports && (
         <Card>
           <CardHeader>
-            <CardTitle>Run results</CardTitle>
-            <CardDescription>{reports.length} case(s) executed.</CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Run results</CardTitle>
+                <CardDescription>
+                  {reports.length} result(s) ·{" "}
+                  {reports.filter((r) => r.status === "passed").length} passed
+                  {failedCaseCount > 0 && (
+                    <span className="text-destructive"> · {failedCaseCount} failed</span>
+                  )}
+                </CardDescription>
+              </div>
+              {failedCaseCount > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void rerunFailed()}
+                  disabled={running}
+                >
+                  {running ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-4 w-4" />
+                  )}
+                  Rerun failed ({failedCaseCount})
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {reports.map((report, index) => (
-              <div
-                key={`${report.case}-${index}`}
-                className="flex items-center justify-between rounded-md border border-border px-4 py-2"
-              >
-                <span className="text-sm">{report.case}</span>
-                <Badge variant={report.status === "passed" ? "success" : "destructive"}>
-                  {report.status}
-                </Badge>
-              </div>
-            ))}
+            {reports.map((report, index) => {
+              const failed = report.status !== "passed";
+              return (
+                <div
+                  key={`${report.fixtureId}-${report.caseId}-${index}`}
+                  className={cn(
+                    "flex items-center justify-between rounded-md border px-4 py-2",
+                    failed ? "border-destructive/40 bg-destructive/5" : "border-border",
+                  )}
+                >
+                  <span className="text-sm">{report.case}</span>
+                  <Badge variant={failed ? "destructive" : "success"}>{report.status}</Badge>
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

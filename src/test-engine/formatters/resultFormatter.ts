@@ -10,6 +10,8 @@ export function toJsonReport(
   return results.map((result) => ({
     suite: suiteTitle,
     fixture: fixture.title,
+    fixtureId: fixture.fixtureId,
+    caseId: result.caseId,
     case: casesById.get(result.caseId)?.title ?? result.caseId,
     status: result.status,
     details: {
