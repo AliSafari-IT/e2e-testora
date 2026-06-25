@@ -18,6 +18,23 @@ function mergeInput(
 }
 
 /**
+ * Build a readable test name that includes the run index and, when a `url`
+ * is present, the source hostname so failures are easy to map back to a
+ * specific listing/site.
+ */
+function formatRunLabel(title: string, run: Record<string, unknown>, index: number): string {
+  const url = run.url;
+  if (typeof url === "string" && url.length > 0) {
+    try {
+      return `${title} (run ${index + 1} — ${new URL(url).hostname})`;
+    } catch {
+      return `${title} (run ${index + 1} — ${url.slice(0, 60)})`;
+    }
+  }
+  return `${title} (run ${index + 1})`;
+}
+
+/**
  * Emits a TestCafe spec for one fixture and its test cases. Each generated
  * test delegates to runScenario(t, data, expected) from the scenario runner,
  * which is the pluggable boundary between generic platform code and a
@@ -49,10 +66,12 @@ function generateCaseBlock(fixture: TestFixtureDefinition, testCase: TestCaseDef
       // the script body can parameterize itself (e.g. run.url) instead of
       // hardcoding a single value.
       const runs = testCase.runs.map((run) => mergeInput(fixture.commonInput, run));
+      const labels = runs.map((run, i) => formatRunLabel(testCase.title, run, i));
       return [
         `const runs_${safeIdent(testCase.caseId)} = ${JSON.stringify(runs)};`,
+        `const labels_${safeIdent(testCase.caseId)} = ${JSON.stringify(labels)};`,
         `for (const [i, run] of runs_${safeIdent(testCase.caseId)}.entries()) {`,
-        `  test(\`${testCase.title} (run \${i + 1})\`, async t => {`,
+        `  test(labels_${safeIdent(testCase.caseId)}[i], async t => {`,
         indent(testCase.script ?? "", "    "),
         `  });`,
         `}`,
@@ -73,10 +92,12 @@ function generateCaseBlock(fixture: TestFixtureDefinition, testCase: TestCaseDef
   }
 
   const runs = (testCase.runs ?? []).map((run) => mergeInput(fixture.commonInput, run));
+  const labels = runs.map((run, i) => formatRunLabel(testCase.title, run, i));
   return [
     `const runs_${safeIdent(testCase.caseId)} = ${JSON.stringify(runs)};`,
+    `const labels_${safeIdent(testCase.caseId)} = ${JSON.stringify(labels)};`,
     `for (const [i, run] of runs_${safeIdent(testCase.caseId)}.entries()) {`,
-    `  test(\`${testCase.title} (run \${i + 1})\`, async t => {`,
+    `  test(labels_${safeIdent(testCase.caseId)}[i], async t => {`,
     `    await runScenario(t, run, ${JSON.stringify(testCase.expected)});`,
     `  });`,
     `}`,
