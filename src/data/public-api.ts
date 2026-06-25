@@ -40,7 +40,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "Database connectivity check.",
-    api: { path: "/health/db", shape: "object", public: true, tolerant: [200, 503] },
+    api: {
+      path: "/health/db",
+      shape: "object",
+      public: true,
+      tolerant: [200, 503],
+    },
   },
   // ── Auth utilities ───────────────────────────────────────────────────────
   {
@@ -71,7 +76,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "TTS voice catalog.",
-    api: { path: "/ai/voices", shape: "object", public: true, tolerant: [200, 500, 502, 503] },
+    api: {
+      path: "/ai/voices",
+      shape: "object",
+      public: true,
+      tolerant: [200, 500, 502, 503],
+    },
   },
   {
     id: "public-ai-music",
@@ -79,7 +89,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "Background-music catalog.",
-    api: { path: "/ai/music", shape: "object", public: true, tolerant: [200, 500, 502, 503] },
+    api: {
+      path: "/ai/music",
+      shape: "object",
+      public: true,
+      tolerant: [200, 500, 502, 503],
+    },
   },
   {
     id: "public-ai-voices-default",
@@ -87,7 +102,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "Default voice per language.",
-    api: { path: "/ai/voices/default", shape: "object", public: true, tolerant: [200, 500, 502, 503] },
+    api: {
+      path: "/ai/voices/default",
+      shape: "object",
+      public: true,
+      tolerant: [200, 500, 502, 503],
+    },
   },
   // ── Marketing content ────────────────────────────────────────────────────
   {
@@ -120,7 +140,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "Published terms document.",
-    api: { path: "/legal/terms", shape: "object", public: true, tolerant: [200, 404] },
+    api: {
+      path: "/legal/terms",
+      shape: "object",
+      public: true,
+      tolerant: [200, 404],
+    },
   },
   {
     id: "public-gdpr-cookie",
@@ -128,7 +153,12 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "Active GDPR cookie-banner content.",
-    api: { path: "/gdpr/cookie-content", shape: "object", public: true, tolerant: [200, 404] },
+    api: {
+      path: "/gdpr/cookie-content",
+      shape: "object",
+      public: true,
+      tolerant: [200, 404],
+    },
   },
   // ── Provider status (external) ───────────────────────────────────────────
   {
@@ -137,16 +167,16 @@ const pages: AdminPageSpec[] = [
     uiPath: DUMMY_PAGE,
     ui: false,
     description: "HeyGen avatar provider status.",
-    api: { path: "/heygen/status", shape: "object", public: true, tolerant: [200, 500, 502, 503] },
+    api: {
+      path: "/heygen/status",
+      shape: "object",
+      public: true,
+      tolerant: [200, 500, 502, 503],
+    },
   },
-  {
-    id: "public-kie-ai-status",
-    title: "Kie AI status",
-    uiPath: DUMMY_PAGE,
-    ui: false,
-    description: "kie.ai cinematic provider status.",
-    api: { path: "/admin/kie-ai/status", shape: "object", public: true, tolerant: [200, 500, 502, 503] },
-  },
+  // NOTE: kie.ai status lives at /admin/kie-ai/status and is admin-guarded, so it
+  // is covered as an authenticated admin endpoint in admin-system.ts (System
+  // Operations), not here. It is intentionally absent from this public chapter.
 ];
 
 const chapter = buildChapter("public-platform", pages, "");
@@ -157,7 +187,8 @@ const contactSuite: TestSuiteDefinition = {
   suiteId: "public-contact",
   frId: "public-platform",
   title: "Contact form",
-  description: "The public contact form validates input before creating a message.",
+  description:
+    "The public contact form validates input before creating a message.",
 };
 
 const contactFixture: TestFixtureDefinition = {
@@ -182,6 +213,15 @@ await t.expect(res.status >= 400 && res.status < 500).ok('expected an empty cont
   },
 ];
 
-export const publicPlatformSuites: TestSuiteDefinition[] = [...chapter.suites, contactSuite];
-export const publicPlatformFixtures: TestFixtureDefinition[] = [...chapter.fixtures, contactFixture];
-export const publicPlatformCases: TestCaseDefinition[] = [...chapter.cases, ...contactCases];
+export const publicPlatformSuites: TestSuiteDefinition[] = [
+  ...chapter.suites,
+  contactSuite,
+];
+export const publicPlatformFixtures: TestFixtureDefinition[] = [
+  ...chapter.fixtures,
+  contactFixture,
+];
+export const publicPlatformCases: TestCaseDefinition[] = [
+  ...chapter.cases,
+  ...contactCases,
+];

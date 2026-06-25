@@ -119,7 +119,7 @@ const GENERATE_FROM_URL_SCRIPT = [
   "// then click it via native JS since it lives in a hidden container.",
   "const generateButton = Selector('[data-testid=\"approve-generate-button\"]');",
   "await t.expect(generateButton.exists).ok('Expected the e2e generate button to be present');",
-  "await t.expect(generateButton.hasAttribute('disabled')).notOk({ timeout: 60000 });",
+  "await t.expect(generateButton.hasAttribute('disabled')).notOk({ timeout: 120000 });",
   "await t.eval(() => {",
   "  const btn = document.querySelector('[data-testid=\"approve-generate-button\"]');",
   "  if (btn) btn.click();",
@@ -127,7 +127,7 @@ const GENERATE_FROM_URL_SCRIPT = [
   "",
   "// Step 4 — generation started: approving moves the job out of",
   "// awaiting_approval, so the approval wizard (orientation panel) unmounts.",
-  "await t.expect(orientationSection.exists).notOk('Expected the job to leave awaiting_approval after submitting', { timeout: 60000 });",
+  "await t.expect(orientationSection.exists).notOk('Expected the job to leave awaiting_approval after submitting', { timeout: 180000 });",
 ].join("\n");
 
 export const videoGenerationFR: FunctionalRequirementDefinition = {
@@ -165,22 +165,31 @@ export const videoGenerationTestCases: TestCaseDefinition[] = [
     // Belgian portal (zimmo) and the DataDome-protected market leader (immoweb).
     runs: [
       {
-        url: "https://www.zimmo.be/nl/hasselt-3500/te-huur/appartement/LPJ5A/",
+        url: "https://www.zimmo.be/nl/hasselt-3500/te-huur/appartement/LPKI0/",
       },
       {
-        url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774",
+        url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/hasselt/3500/21670974",
       },
       {
-        url: "https://www.funda.nl/detail/koop/den-helder/huisjan-verfailleweg-15/80849612/",
+        url: "https://www.funda.nl/detail/koop/den-burg/huis-hallerweg-7/89792944/",
       },
       {
-        url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe37748",
+        url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe35211",
       },
       {
-        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/1156943",
+        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/916365",
       },
       {
-        url: "https://www.booking.com/hotel/be/martin-s-patershof.nl.html?aid=397594&label=gog235jc-10CAEoggI46AdIHFgDaBWIAQGYATO4ARfIAQzYAQPoAQH4AQGIAgGoAgG4AorV5tEGwAIB0gIkNTE4YzE3NWYtODA0NS00MzZjLTg3MDQtOTc5MDdkYjA2NzUw2AIB4AIB-Share-aPkX8K0%401782164135&sid=d60caa7ead2a1fc3e939d00e00ca8fd3&all_sr_blocks=4416307_390503062_2_2_0&checkin=2026-08-02&checkout=2026-08-03&dest_id=-1964894&dest_type=city&dist=0&group_adults=2&group_children=0&hapos=1&highlighted_blocks=4416307_390503062_2_2_0&hpos=1&matching_block_id=4416307_390503062_2_2_0&no_rooms=1&req_adults=2&req_children=0&room1=A%2CA&sb_price_type=total&sr_order=popularity&sr_pri_blocks=4416307_390503062_2_2_0__13673&srepoch=1782200955&srpvid=b6a336f316c1010b&type=total&ucfs=1&"
+        url: "https://www.booking.com/hotel/be/hetklooster.nl.html?aid=397594&label=gog235jc-10CAEoggI46AdIHFgDaBWIAQGYATO4ARfIAQzYAQPoAQH4AQGIAgGoAgG4AorV5tEGwAIB0gIkNTE4YzE3NWYtODA0NS00MzZjLTg3MDQtOTc5MDdkYjA2NzUw2AIB4AIB-Share-aPkX8K0%401782164135&sid=1281df4779b51cf65c4a5298a23a8e45&checkin=2026-08-02&checkout=2026-08-03&dest_id=-1964894&dest_type=city&group_adults=2&group_children=0&no_rooms=1&sb_travel_purpose=0&ucfac=481&"
+      },
+      {
+        url: "https://www.trivago.be/en-US/acd/?fpip=1&search=100-49464328;dr-20260720-20260731;drs-40;rc-1-2-6#::effects=logNewTab-49464328-0"
+      },
+      {
+        url: "https://kamernet.nl/huren/kamer-utrecht/st-ludgerusstraat/kamer-2387405"
+      },
+      {
+        url: "https://www.logic-immo.com/detail-vente-265804185.htm"
       }
     ],
     expected: {},

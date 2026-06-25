@@ -27,7 +27,8 @@ const pages: AdminPageSpec[] = [
     id: "overview",
     title: "Admin Overview",
     uiPath: "/en/admin",
-    description: "Admin dashboard home — platform KPIs (users, agents, jobs, videos, cost) from /admin/stats.",
+    description:
+      "Admin dashboard home — platform KPIs (users, agents, jobs, videos, cost) from /admin/stats.",
     api: {
       path: "/admin/stats",
       shape: "object",
@@ -102,13 +103,25 @@ const pages: AdminPageSpec[] = [
     title: "TTS",
     uiPath: "/en/admin/tts",
     description: "Text-to-speech provider diagnostics + usage.",
-    api: { path: "/admin/ai/tts/status", shape: "object", tolerant: [200, 424, 500, 502, 503] },
+    api: {
+      path: "/admin/ai/tts/status",
+      shape: "object",
+      tolerant: [200, 424, 500, 502, 503],
+    },
   },
   {
     id: "kie-ai",
     title: "Kie AI",
     uiPath: "/en/admin/kie-ai",
     description: "kie.ai cinematic provider console.",
+    // /admin/kie-ai/status is admin-guarded (JwtAuthGuard + RolesGuard @Admin),
+    // so it gets the authenticated GET + anonymous-401 pair like the other
+    // provider-status endpoints — it is NOT a public endpoint.
+    api: {
+      path: "/admin/kie-ai/status",
+      shape: "object",
+      tolerant: [200, 424, 500, 502, 503],
+    },
   },
   {
     id: "cinematic-clips",
@@ -122,7 +135,11 @@ const pages: AdminPageSpec[] = [
     uiPath: "/en/admin/ai-video",
     description: "AI video provider status + generation.",
     superadminOnly: true,
-    api: { path: "/admin/ai-video/status", shape: "object", tolerant: [200, 424, 500, 502, 503] },
+    api: {
+      path: "/admin/ai-video/status",
+      shape: "object",
+      tolerant: [200, 424, 500, 502, 503],
+    },
   },
   {
     id: "provider-test",
@@ -170,7 +187,11 @@ const pages: AdminPageSpec[] = [
     uiPath: "/en/admin/alignment-monitor",
     description: "Recent voiceover/scene alignment runs.",
     superadminOnly: true,
-    api: { path: "/admin/alignment/recent", shape: "object", tolerant: [200, 404, 500] },
+    api: {
+      path: "/admin/alignment/recent",
+      shape: "object",
+      tolerant: [200, 404, 500],
+    },
   },
   {
     id: "automation",

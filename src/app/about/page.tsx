@@ -546,7 +546,7 @@ function Recipes() {
       icon: Repeat,
       title: "Keep success cases re-runnable",
       problem: "A passing sign-up creates a user — run it twice and the unique-email constraint trips.",
-      fix: "Generate a fresh plus-addressed email per run (admin+e2e<unique>@example.com) so the suite is idempotent.",
+      fix: "Generate a fresh plus-addressed email per run (asafarim+e2e<unique>@gmail.com) so the suite is idempotent.",
     },
     {
       icon: ShieldCheck,
