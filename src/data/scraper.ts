@@ -176,18 +176,21 @@ export const scraperTestCases: TestCaseDefinition[] = [
         url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774",
       },
       {
-        url: "https://www.funda.nl/detail/koop/den-helder/huisjan-verfailleweg-15/80849612/",
+        url: "https://www.funda.nl/detail/koop/den-burg/huis-hallerweg-7/89792944/",
       },
       {
         url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe37748",
       },
       {
-        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/1156943",
+        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/916365",
       },
-      // NOTE: booking.com is a hotel-booking site, not a property listing the
-      // scraper supports, so it was removed from this smoke — it produced a
-      // misleading failure (success:true with an empty title) rather than a
-      // real defect. Only supported listing sources belong here.
+      {
+        url: "https://www.booking.com/hotel/be/hetklooster.nl.html?aid=397594&label=gog235jc-10CAEoggI46AdIHFgDaBWIAQGYATO4ARfIAQzYAQPoAQH4AQGIAgGoAgG4AorV5tEGwAIB0gIkNTE4YzE3NWYtODA0NS00MzZjLTg3MDQtOTc5MDdkYjA2NzUw2AIB4AIB-Share-aPkX8K0%401782164135&sid=1281df4779b51cf65c4a5298a23a8e45&checkin=2026-08-02&checkout=2026-08-03&dest_id=-1964894&dest_type=city&group_adults=2&group_children=0&no_rooms=1&sb_travel_purpose=0&ucfac=481&"
+      },
+      {
+        url: "https://www.immotop.lu/annonces/1226537/"
+      },
+      {url: "https://www.athome.lu/location/appartement/lintgen/id-9196026.html"}
     ],
     expected: {},
     script: LIVE_SCRIPT,
