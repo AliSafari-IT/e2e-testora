@@ -153,6 +153,10 @@ export const listingsWizardFixture: TestFixtureDefinition = {
   baseUrl: "/en/login",
   commonInput: {},
   setupScript: LOGIN_SETUP_SCRIPT,
+  // Full live video-generation happy path across many sites — very slow and the
+  // heaviest load on the backend. Skipped in "All requirements" runs unless
+  // explicitly included.
+  metadata: { heavy: true },
 };
 
 export const videoGenerationTestCases: TestCaseDefinition[] = [

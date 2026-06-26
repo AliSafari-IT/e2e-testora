@@ -76,6 +76,7 @@ export const profileTabsFixture: TestFixtureDefinition = {
   title: "Profile page — load, tab switching, deep-link, auth gate",
   baseUrl: "/en/profile",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 export const profileApiFixture: TestFixtureDefinition = {
@@ -92,6 +93,7 @@ export const navbarDropdownFixture: TestFixtureDefinition = {
   title: "Navbar dropdown — items, admin link, navigation",
   baseUrl: "/en/dashboard",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 /* ------------------------------------------------------------------ */
@@ -168,8 +170,12 @@ await t.expect(Selector('body').withText('Change Password').with({ timeout: 1500
     title: "Visiting /profile without a session redirects to login",
     scriptType: "scripted",
     // No browser login: clear any session and confirm the guard bounces us.
+    // The app rehydrates auth from an httpOnly refresh cookie, so clearing
+    // localStorage alone leaves the user logged in — we MUST drop cookies too
+    // (otherwise this asserts nothing and false-fails).
     expected: {},
     script: `
+await t.deleteCookies();
 await t.eval(() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} });
 await t.navigateTo('/en/profile');
 await t.wait(2500);

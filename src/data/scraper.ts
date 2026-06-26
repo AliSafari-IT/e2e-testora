@@ -48,9 +48,9 @@ const LOGIN_SNIPPET = [
   "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
   "  let last = 0;",
   "  for (let i = 0; i < 4; i++) {",
-  "    const login = await t.request.post(api + '/auth/login', {",
-  "      body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: process.env.WEBAPP_ADMIN_PASSWORD || '' },",
-  "    });",
+  "    let login;",
+  "    try { login = await t.request.post(api + '/auth/login', { body: { email: (process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com'), password: process.env.WEBAPP_ADMIN_PASSWORD || '' }, timeout: 60000 }); }",
+  "    catch (e) { last = 0; await t.wait(3000); continue; }",
   "    last = login.status;",
   "    if (login.status === 200) { globalThis.__e2eToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
   "    if (login.status === 429) { await t.wait(15000); continue; }",
@@ -120,6 +120,9 @@ export const scraperLiveFixture: TestFixtureDefinition = {
   title: "Scraper live smoke — a real scrape returns a usable listing",
   baseUrl: "/en/login",
   commonInput: { apiUrl: API_DEFAULT },
+  // Real network scrapes — slow and load-heavy. Skipped in "All requirements"
+  // runs unless explicitly included; run it on its own when you want it.
+  metadata: { heavy: true },
 };
 
 // One representative URL per supported source. The path segments are

@@ -221,6 +221,8 @@ export function RunPanel() {
     cancelRun,
   } = useRun();
   const [scope, setScope] = useState<RunScope>("fixture");
+  const [includeHeavy, setIncludeHeavy] = useState(false);
+  const [includeUi, setIncludeUi] = useState(false);
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
   const [suites, setSuites] = useState<SuiteSummary[]>([]);
   const [requirements, setRequirements] = useState<RequirementSummary[]>([]);
@@ -627,15 +629,39 @@ export function RunPanel() {
             )}
 
             {scope === "all" && (
-              <span className="text-sm text-muted-foreground">
-                Runs every functional requirement — {requirements.length}{" "}
-                requirement(s), {allTotals.fixtures} fixtures, {allTotals.cases}{" "}
-                cases — against the selected target.
-              </span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-muted-foreground">
+                  Runs every functional requirement — {requirements.length}{" "}
+                  requirement(s), {allTotals.fixtures} fixtures, {allTotals.cases}{" "}
+                  cases. By default this is an API-only health check (browser & heavy
+                  fixtures skipped).
+                </span>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={includeUi}
+                    onChange={(event) => setIncludeUi(event.target.checked)}
+                    disabled={running}
+                  />
+                  Include UI smokes (browser page checks) — launches Chrome + logs in per fixture.
+                </label>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-primary"
+                    checked={includeHeavy}
+                    onChange={(event) => setIncludeHeavy(event.target.checked)}
+                    disabled={running}
+                  />
+                  Include heavy live fixtures (video generation, live scrapes) — much slower, may
+                  overload a local backend.
+                </label>
+              </div>
             )}
 
             <Button
-              onClick={() => startRun({ scope, id: selectedId })}
+              onClick={() => startRun({ scope, id: selectedId, includeHeavy, includeUi })}
               disabled={running || !canRun}
             >
               {running ? (

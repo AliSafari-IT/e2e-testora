@@ -39,7 +39,9 @@ export const ADMIN_HELPERS = [
   "  if (cached && (Date.now() - cached.at) < 600000) return cached.value;",
   "  let last = 0; let lastBody = '';",
   "  for (let i = 0; i < 4; i++) {",
-  "    const login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.WEBAPP_ADMIN_PASSWORD || '' } });",
+  "    let login;",
+  "    try { login = await t.request.post(api + '/auth/login', { body: { email: ADMIN_EMAIL, password: process.env.WEBAPP_ADMIN_PASSWORD || '' }, timeout: 60000 }); }",
+  "    catch (e) { last = 0; lastBody = 'request error: ' + (e && e.message ? e.message : e); await t.wait(3000); continue; }",
   "    last = login.status; try { lastBody = (typeof login.body === 'string' ? login.body : JSON.stringify(login.body)).slice(0, 200); } catch (e) { lastBody = ''; }",
   "    if (login.status === 200) { globalThis.__e2eAdminToken = { value: login.body.accessToken, at: Date.now() }; return login.body.accessToken; }",
   "    if (login.status === 429) { await t.wait(15000); continue; }",
@@ -141,7 +143,14 @@ export function uiSmoke(
       ").with({ timeout: 30000 }).exists).ok('expected to see ' + " +
       JSON.stringify(literal) +
       " + ' on the page');"
-    : "await t.expect(Selector('h1, h2, main, table, [role=\"main\"]').with({ timeout: 30000 }).exists).ok('expected the admin page content to render');";
+    : // Let the client-side data fetch settle (spinner gone) before checking, so
+      // a slow load under a heavy run doesn't false-fail. The selector includes
+      // <section> + headings because several admin shells (AdminSectionCard,
+      // AdminPageShell, empty-states) render content with no <main>/<table>.
+      [
+        "for (let s = 0; s < 30; s++) { if (!(await Selector('.animate-spin').exists)) break; await t.wait(1000); }",
+        "await t.expect(Selector('main, section, h1, h2, h3, table, [role=\"main\"]').with({ timeout: 30000 }).exists).ok('expected the admin page content to render');",
+      ].join("\n");
   const redirectHint = superadminOnly
     ? " — this page is superadmin-only, so an admin-but-not-superadmin account is redirected."
     : " — the account is likely not admin/superadmin.";
@@ -371,6 +380,9 @@ export function buildChapter(
         title: `${page.title} page`,
         baseUrl: page.uiPath,
         commonInput: {},
+        // Browser page-load smoke (launches Chrome + logs in). Skipped in an
+        // "All requirements" run unless UI smokes are explicitly included.
+        metadata: { ui: true },
       });
       cases.push(
         uiSmokeCase({

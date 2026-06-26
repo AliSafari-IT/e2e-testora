@@ -27,6 +27,10 @@ export type RunScope = "fixture" | "suite" | "requirement" | "all";
 export interface RunTarget {
   scope: RunScope;
   id: string;
+  /** For the "all" scope: also include heavy live fixtures (default off). */
+  includeHeavy?: boolean;
+  /** For the "all" scope: also include browser/UI smoke fixtures (default off). */
+  includeUi?: boolean;
 }
 
 // The "base scope" for a run: which deployment the tests target. Empty fields
@@ -448,7 +452,11 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
   const startRun = useCallback(
     async (target: RunTarget) => {
       if (target.scope === "all") {
-        await beginRun({ all: true });
+        await beginRun({
+          all: true,
+          ...(target.includeHeavy ? { includeHeavy: true } : {}),
+          ...(target.includeUi ? { includeUi: true } : {}),
+        });
         return;
       }
       if (!target.id) return;

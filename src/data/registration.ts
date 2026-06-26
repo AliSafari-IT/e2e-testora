@@ -158,6 +158,7 @@ export const registerUiFixture: TestFixtureDefinition = {
   title: "Register page — sign-up happy path",
   baseUrl: "/en/register",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 export const registrationTestCases: TestCaseDefinition[] = [

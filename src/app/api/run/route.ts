@@ -107,6 +107,14 @@ function isDestructive(unit: RunUnit): boolean {
   return unit.fixture.metadata?.destructive === true;
 }
 
+function isHeavy(unit: RunUnit): boolean {
+  return unit.fixture.metadata?.heavy === true;
+}
+
+function isUi(unit: RunUnit): boolean {
+  return unit.fixture.metadata?.ui === true;
+}
+
 export async function POST(request: Request) {
   const body = await request.json();
   const parsed = requestSchema.safeParse(body);
@@ -182,6 +190,27 @@ export async function POST(request: Request) {
     }
   }
 
+  // Heavy live fixtures (video generation, real network scrapes) are slow and
+  // overload the backend, cascading into login timeouts on later fixtures. Skip
+  // them in an "All requirements" run unless explicitly opted in — they stay
+  // runnable on their own (or via the include toggle).
+  const isAllScope = "all" in data;
+  const includeHeavy = body && typeof body === "object" && body.includeHeavy === true;
+  const includeUi = body && typeof body === "object" && body.includeUi === true;
+  let skippedHeavy: string[] = [];
+  let skippedUiCount = 0;
+  if (isAllScope && !includeHeavy) {
+    skippedHeavy = runnableUnits.filter(isHeavy).map((unit) => unit.fixture.title);
+    runnableUnits = runnableUnits.filter((unit) => !isHeavy(unit));
+  }
+  // Browser UI smokes are slow (Chrome launch + login each) — skip them in an
+  // "All requirements" run by default so it's a fast API-only health check.
+  if (isAllScope && !includeUi) {
+    const before = runnableUnits.length;
+    runnableUnits = runnableUnits.filter((unit) => !isUi(unit));
+    skippedUiCount = before - runnableUnits.length;
+  }
+
   const runId = randomUUID();
   createRun(runId);
 
@@ -200,6 +229,18 @@ export async function POST(request: Request) {
     appendLog(
       runId,
       `⚠ Skipped ${skippedDestructive.length} data-mutating fixture(s) on a web target (${baseUrl}): ${skippedDestructive.join(", ")}`,
+    );
+  }
+  if (skippedHeavy.length > 0) {
+    appendLog(
+      runId,
+      `⚠ Skipped ${skippedHeavy.length} heavy live fixture(s) — run them individually, or enable "Include heavy live fixtures": ${skippedHeavy.join(", ")}`,
+    );
+  }
+  if (skippedUiCount > 0) {
+    appendLog(
+      runId,
+      `⚠ Skipped ${skippedUiCount} browser/UI fixture(s) — this is an API-only run. Enable "Include UI smokes" to run them too.`,
     );
   }
 

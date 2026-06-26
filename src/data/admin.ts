@@ -107,6 +107,7 @@ export const adminUsersUiFixture: TestFixtureDefinition = {
   title: "Users page — admin can open the accounts table",
   baseUrl: "/en/admin/users",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 export const adminClientsApiFixture: TestFixtureDefinition = {
@@ -123,6 +124,7 @@ export const adminClientsUiFixture: TestFixtureDefinition = {
   title: "Clients page — admin can open the clients table",
   baseUrl: "/en/admin/clients",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 export const adminAgentsApiFixture: TestFixtureDefinition = {
@@ -141,6 +143,7 @@ export const adminAgentsUiFixture: TestFixtureDefinition = {
   title: "Agents page — admin can open the agents table",
   baseUrl: "/en/admin/agents",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 export const adminCreditsApiFixture: TestFixtureDefinition = {
@@ -159,6 +162,7 @@ export const adminCreditsUiFixture: TestFixtureDefinition = {
   title: "Credits page — admin can open the credits dashboard",
   baseUrl: "/en/admin/credits",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 /* ------------------------------------------------------------------ */

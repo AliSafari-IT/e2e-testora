@@ -117,6 +117,7 @@ export const loginWithEmailFixture: TestFixtureDefinition = {
   title: "Login using email/password",
   baseUrl: "/en/login",
   commonInput: {},
+  metadata: { ui: true },
 };
 
 const ACCOUNT_EMAIL = (process.env.WEBAPP_ADMIN_EMAIL || "admin@example.com");
