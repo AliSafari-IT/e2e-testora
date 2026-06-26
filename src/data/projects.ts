@@ -33,16 +33,31 @@ const WEBAPP_PROJECT: ProjectDef = {
     process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1",
 };
 
-// ASafariM Portal — the maintainer's own site, so it's fine to name directly.
+// ASafariM apps — the maintainer's own sites, each on its own subdomain, so
+// each is its own project with its own default URL. Selecting the app pre-fills
+// the right origin (a single shared default would point edumatch runs at the
+// portal and vice-versa).
 const ASAFARIM_PORTAL: ProjectDef = {
-  id: "asafarim",
-  name: "ASafariM Portal",
-  baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_BASE_URL || "https://portal.asafarim.com",
-  apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_API_URL || "https://portal.asafarim.com/api",
+  id: "asafarim-portal",
+  name: "ASafariM · Portal",
+  baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_PORTAL_URL || "https://portal.asafarim.com",
+  apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_PORTAL_URL || "https://portal.asafarim.com",
   brand: { productName: "ASafariM", companyName: "ASafariM" },
 };
 
-export const PROJECTS: ProjectDef[] = [WEBAPP_PROJECT, ASAFARIM_PORTAL];
+const ASAFARIM_EDUMATCH: ProjectDef = {
+  id: "asafarim-edumatch",
+  name: "ASafariM · EduMatch",
+  baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_EDUMATCH_URL || "https://edumatch.asafarim.com",
+  apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_EDUMATCH_URL || "https://edumatch.asafarim.com",
+  brand: { productName: "EduMatch", companyName: "ASafariM" },
+};
+
+export const PROJECTS: ProjectDef[] = [
+  WEBAPP_PROJECT,
+  ASAFARIM_PORTAL,
+  ASAFARIM_EDUMATCH,
+];
 
 /** The catalog every existing requirement is tagged with. */
 export const DEFAULT_PROJECT_ID = WEBAPP_PROJECT.id;

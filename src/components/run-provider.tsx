@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_PROJECT_ID } from "@/data/projects";
+import { DEFAULT_PROJECT_ID, getProject } from "@/data/projects";
 
 // Kept in sync with ACTIVE_PROJECT_COOKIE in @/lib/active-project (that module
 // imports next/headers and can't be pulled into this client component). The
@@ -340,6 +340,19 @@ export function RunProvider({
         document.cookie = `${PROJECT_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
       } catch {
         /* ignore */
+      }
+      // Pre-fill the target with the app's own origin, so a run hits the right
+      // deployment (apps live on different domains — portal vs edumatch). The
+      // user can still override the URLs afterwards for a dev/custom target.
+      const proj = getProject(id);
+      if (proj) {
+        const env: RunEnvironment = { baseUrl: proj.baseUrl, apiUrl: proj.apiUrl };
+        setEnvironmentState(env);
+        try {
+          localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(env));
+        } catch {
+          /* ignore */
+        }
       }
       router.refresh();
     },

@@ -19,7 +19,7 @@ import type {
 
 export const edumatchFR: FunctionalRequirementDefinition = {
   id: "asafarim-edumatch",
-  projectId: "asafarim",
+  projectId: "asafarim-edumatch",
   title: "EduMatch · Student & Tutor",
   description:
     "Student asks questions (3 grade levels), gets an AI answer and requests tutor quotes; a tutor submits a quote.",
@@ -77,6 +77,9 @@ await t.navigateTo(eduOrigin + '${triggerPath}');
 await t.wait(3000);
 const authedPath = await t.eval(() => window.location.pathname);
 await t.expect(authedPath.indexOf('/sign-in')).eql(-1, 'should be signed in and reach ${triggerPath} (ended on ' + authedPath + ')');
+// Fail fast (not after a long selector timeout) if the run is pointed at the
+// wrong app — the EduMatch routes only exist on the EduMatch deployment.
+await t.expect(authedPath).contains('${triggerPath}', 'expected to be on ${triggerPath} — is the Target set to the EduMatch app (ASAFARIM_EDUMATCH_URL), not the portal? Current origin: ' + eduOrigin);
 `;
 }
 

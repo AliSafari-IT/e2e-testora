@@ -182,14 +182,14 @@ const bundles: SeedBundle[] = [
     suites: asafarimPortalSuites,
     fixtures: asafarimPortalFixtures,
     cases: asafarimPortalCases,
-    projectId: "asafarim",
+    projectId: "asafarim-portal",
   },
   {
     fr: edumatchFR,
     suites: edumatchSuites,
     fixtures: edumatchFixtures,
     cases: edumatchCases,
-    projectId: "asafarim",
+    projectId: "asafarim-edumatch",
   },
 ];
 

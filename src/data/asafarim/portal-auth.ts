@@ -24,7 +24,7 @@ import type {
 
 export const asafarimPortalAuthFR: FunctionalRequirementDefinition = {
   id: "asafarim-portal-auth",
-  projectId: "asafarim",
+  projectId: "asafarim-portal",
   title: "Portal · Authentication",
   description:
     "NextAuth email/password sign-in to the ASafariM portal — the SSO hub for all asafarim.com apps.",
