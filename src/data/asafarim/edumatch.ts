@@ -127,6 +127,13 @@ const edumatchStudentCases: TestCaseDefinition[] = [
         "/student/inquiry/new",
       ) +
       `
+// Backstop for the geolocation permission prompt that "Request Tutor Quotes"
+// triggers — TestCafe can't accept a native dialog otherwise.
+await t.setNativeDialogHandler((type) => {
+  if (type === 'geolocation') return { latitude: 50.8503, longitude: 4.3517 };
+  return null;
+});
+
 // ── Step 1 (Subject & Level): pick the course + grade ──────────────────────
 await t.expect(Selector('select').filterVisible().with({ timeout: 30000 }).exists).ok('the Ask a Question wizard should render');
 const subjectSelect = Selector('select').filterVisible();
@@ -146,6 +153,15 @@ await t.click(advance()); // Review
 // ── Step 3 (Review): submit ────────────────────────────────────────────────
 await t.click(advance()); // Submit
 
+// A brand-new student has no profile yet: the first submit returns 403 and the
+// wizard shows a "create profile" gate (a full-width primary button) instead of
+// navigating. Clicking it creates the profile AND auto-resubmits the inquiry.
+await t.wait(3000);
+if ((await t.eval(() => window.location.pathname)).indexOf('/student/inquiry/new') !== -1) {
+  const createProfile = Selector('button[class*="--color-primary"][class*="w-full"]').filterVisible();
+  if (await createProfile.exists) { await t.click(createProfile); }
+}
+
 // Land on the inquiry detail page (/student/inquiry/<id>, not /new).
 let onDetail = false; let dp = '';
 for (let i = 0; i < 30; i++) {
@@ -153,15 +169,33 @@ for (let i = 0; i < 30; i++) {
   if (/\\/student\\/inquiry\\/[^/]+$/.test(dp) && dp.indexOf('/new') === -1) { onDetail = true; break; }
   await t.wait(1000);
 }
-await t.expect(onDetail).ok('after submitting, should land on the inquiry detail page (was at ' + dp + ')');
+let whyNew = '';
+if (!onDetail) { try { whyNew = (await Selector('body').innerText).replace(/\\s+/g, ' ').slice(0, 300); } catch (e) { whyNew = ''; } }
+await t.expect(onDetail).ok('after submitting, should land on the inquiry detail page (was at ' + dp + '). Page said: ' + whyNew);
+
+// Mock browser geolocation directly too, so "Request Tutor Quotes" gets a
+// position without any dialog at all (belt + suspenders with the handler above).
+await t.eval(() => {
+  try {
+    const c = { latitude: 50.8503, longitude: 4.3517, accuracy: 10, altitude: null, altitudeAccuracy: null, heading: null, speed: null };
+    navigator.geolocation.getCurrentPosition = function (s) { s({ coords: c, timestamp: Date.now() }); };
+    navigator.geolocation.watchPosition = function (s) { s({ coords: c, timestamp: Date.now() }); return 0; };
+  } catch (e) { /* ignore */ }
+});
 
 // ── Ask AI, then wait for the answer to reveal "Request Tutor Quotes" ───────
-const askAi = Selector('button').withText('Ask AI').filterVisible();
-if (await askAi.exists) { await t.click(askAi); }
-// The green button only appears once the inquiry is AI_RESPONDED and the stream
-// is done — give the live AI generation a generous ceiling.
+// The AI button is the primary one in the AI section (label varies: "Ask AI" /
+// "Ask Again"). The green "Request Tutor Quotes" only appears once the inquiry
+// is AI_RESPONDED and the stream finished — retry the ask once if the live AI
+// generation stalls (e.g. provider rate-limit on rapid back-to-back questions).
+const aiBtn = Selector('button[class*="--color-primary"][class*="px-4"]').filterVisible();
 const reqBtn = Selector('button').withText('Request Tutor Quotes');
-await t.expect(reqBtn.with({ timeout: 150000 }).exists).ok('Ask AI should produce a response and reveal "Request Tutor Quotes"');
+let gotReq = false;
+for (let attempt = 0; attempt < 2; attempt++) {
+  if (await aiBtn.exists) { await t.click(aiBtn); }
+  if (await reqBtn.with({ timeout: 120000 }).exists) { gotReq = true; break; }
+}
+await t.expect(gotReq).ok('Ask AI should produce a response and reveal "Request Tutor Quotes"');
 await t.click(reqBtn.filterVisible());
 
 // ── Success: "🎉 Your request has been sent!" ──────────────────────────────
