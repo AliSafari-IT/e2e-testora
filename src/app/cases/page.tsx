@@ -3,12 +3,14 @@ export const dynamic = "force-dynamic";
 import { CaseListView } from "@/components/entities/case-list";
 import { CollapsibleCaseForm } from "@/components/forms/collapsible-case-form";
 import { getTestCases, getTestFixtures, getLastResultByCase } from "@/lib/queries";
+import { getActiveProjectId } from "@/lib/active-project";
 import { singleResult } from "@/lib/run-status";
 
 export default async function CasesPage() {
+  const projectId = await getActiveProjectId();
   const [cases, fixtures, lastByCase] = await Promise.all([
-    getTestCases(),
-    getTestFixtures(),
+    getTestCases(projectId),
+    getTestFixtures(projectId),
     getLastResultByCase(),
   ]);
   const fixtureOptions = fixtures.map((fixture) => ({ fixtureId: fixture.fixtureId, title: fixture.title }));

@@ -4,8 +4,9 @@ import { db } from "@/db/client";
 import { testSuites } from "@/db/schema";
 import { getSuiteSummaries } from "@/lib/queries";
 
-export async function GET() {
-  return NextResponse.json(await getSuiteSummaries());
+export async function GET(request: Request) {
+  const projectId = new URL(request.url).searchParams.get("project") || undefined;
+  return NextResponse.json(await getSuiteSummaries(projectId));
 }
 
 const createSchema = z.object({

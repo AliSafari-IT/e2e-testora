@@ -8,6 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
+import { DEFAULT_PROJECT_ID } from "@/data/projects";
+
+// Kept in sync with ACTIVE_PROJECT_COOKIE in @/lib/active-project (that module
+// imports next/headers and can't be pulled into this client component). The
+// initial value is passed in from the server (read from the cookie) so the app
+// badge renders the right app immediately, with no hydration flash.
+const PROJECT_COOKIE = "e2e_active_project";
 
 export interface ReportEntry {
   suite: string;
@@ -43,6 +51,9 @@ export interface RunEnvironment {
 interface RunContextValue {
   selectedFixtureId: string;
   setSelectedFixtureId: (id: string) => void;
+  // The active app/project; scopes the Run pickers + an "all" run to one app.
+  projectId: string;
+  setProjectId: (id: string) => void;
   environment: RunEnvironment;
   setEnvironment: (env: RunEnvironment) => void;
   // The environment the currently displayed run was launched with (may differ
@@ -121,8 +132,18 @@ const RUN_START_TIME_KEY = "e2e_active_run_start_time";
  * The run itself executes server-side regardless; this just keeps the client
  * attached to it instead of tearing the stream down when /run unmounts.
  */
-export function RunProvider({ children }: { children: React.ReactNode }) {
+export function RunProvider({
+  children,
+  initialProject,
+}: {
+  children: React.ReactNode;
+  initialProject?: string;
+}) {
+  const router = useRouter();
   const [selectedFixtureId, setSelectedFixtureId] = useState("");
+  const [projectId, setProjectIdState] = useState<string>(
+    initialProject ?? DEFAULT_PROJECT_ID,
+  );
   const [environment, setEnvironmentState] = useState<RunEnvironment>({});
   const [runEnvironment, setRunEnvironment] = useState<RunEnvironment | null>(
     null,
@@ -300,7 +321,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
     };
   }, [attach]);
 
-  // Restore the chosen target environment.
+  // Restore the chosen target environment + active project.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(ENV_STORAGE_KEY);
@@ -309,6 +330,21 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       /* ignore */
     }
   }, []);
+
+  const setProjectId = useCallback(
+    (id: string) => {
+      setProjectIdState(id);
+      // Cookie (not localStorage) so server components — Cases/Requirements/
+      // Results — read the same active app. Refresh re-renders them with it.
+      try {
+        document.cookie = `${PROJECT_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+      } catch {
+        /* ignore */
+      }
+      router.refresh();
+    },
+    [router],
+  );
 
   const setEnvironment = useCallback((env: RunEnvironment) => {
     setEnvironmentState(env);
@@ -394,6 +430,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         ...body,
         ...(environment.baseUrl ? { baseUrl: environment.baseUrl } : {}),
         ...(environment.apiUrl ? { apiUrl: environment.apiUrl } : {}),
+        ...(projectId ? { projectId } : {}),
       };
       const post = () =>
         fetch("/api/run", {
@@ -446,7 +483,7 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [attach, environment, cancelActiveRun],
+    [attach, environment, projectId, cancelActiveRun],
   );
 
   const startRun = useCallback(
@@ -499,6 +536,8 @@ export function RunProvider({ children }: { children: React.ReactNode }) {
       value={{
         selectedFixtureId,
         setSelectedFixtureId,
+        projectId,
+        setProjectId,
         environment,
         setEnvironment,
         runEnvironment,

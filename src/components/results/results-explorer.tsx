@@ -19,6 +19,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  Camera,
   Check,
   Copy,
   FileCode2,
@@ -732,14 +733,26 @@ export function ResultsExplorer({
                         </td>
                         <td className="py-2">
                           {r.errorMessage ? (
-                            <button
-                              type="button"
-                              onClick={() => setErrorRow(r)}
-                              title="Click to view the full error"
-                              className="max-w-[320px] truncate text-left font-mono text-xs text-red-500 underline-offset-2 hover:underline"
-                            >
-                              {errorPreview(r.errorMessage)}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {r.screenshot && (
+                                <Camera
+                                  className="h-3.5 w-3.5 shrink-0 text-amber-500"
+                                  aria-label="Screenshot captured at failure"
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setErrorRow(r)}
+                                title={
+                                  r.screenshot
+                                    ? "Click to view the full error and failure screenshot"
+                                    : "Click to view the full error"
+                                }
+                                className="max-w-[320px] truncate text-left font-mono text-xs text-red-500 underline-offset-2 hover:underline"
+                              >
+                                {errorPreview(r.errorMessage)}
+                              </button>
+                            </div>
                           ) : null}
                         </td>
                       </tr>
@@ -876,6 +889,19 @@ export function ResultsExplorer({
           <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs leading-relaxed text-red-400">
             {errorRow?.errorMessage ?? ""}
           </pre>
+          {errorRow?.screenshot && (
+            <figure className="mt-3 shrink-0">
+              <figcaption className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
+                Screenshot at failure
+              </figcaption>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={errorRow.screenshot}
+                alt="Screenshot at failure"
+                className="max-h-[45vh] w-full rounded-md border border-border object-contain"
+              />
+            </figure>
+          )}
         </DialogContent>
       </Dialog>
 

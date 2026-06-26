@@ -30,7 +30,8 @@ import {
 } from "@/components/run-provider";
 import { DomainBrandControl } from "@/components/run/domain-brand-control";
 import { SavedTargetsControl } from "@/components/run/saved-targets-control";
-import { hostFromUrl } from "@/lib/domain-logos";
+import { hostFromUrl, setDomainBrand } from "@/lib/domain-logos";
+import { PROJECTS, getProject } from "@/data/projects";
 import { cn } from "@/lib/utils";
 
 interface FixtureSummary {
@@ -206,6 +207,8 @@ export function RunPanel() {
   const {
     selectedFixtureId,
     setSelectedFixtureId,
+    projectId,
+    setProjectId,
     environment,
     setEnvironment,
     runEnvironment,
@@ -240,22 +243,26 @@ export function RunPanel() {
   // Re-fetch the three catalog lists (after mount, and after a re-seed) while
   // preserving the current selections.
   const refreshCatalog = useCallback(async () => {
+    const q = `?project=${encodeURIComponent(projectId)}`;
     const [f, s, r] = await Promise.all([
-      fetch("/api/fixtures").then(
+      fetch(`/api/fixtures${q}`).then(
         (res) => res.json() as Promise<FixtureSummary[]>,
       ),
-      fetch("/api/suites").then((res) => res.json() as Promise<SuiteSummary[]>),
-      fetch("/api/requirements").then(
+      fetch(`/api/suites${q}`).then((res) => res.json() as Promise<SuiteSummary[]>),
+      fetch(`/api/requirements${q}`).then(
         (res) => res.json() as Promise<RequirementSummary[]>,
       ),
     ]);
     setFixtures(f);
     setSuites(s);
     setRequirements(r);
-    setSelectedSuiteId((current) => current || s[0]?.suiteId || "");
-    setSelectedRequirementId((current) => current || r[0]?.id || "");
+    // The selections belong to the previous project's catalog, so re-anchor them
+    // to this project's first entries.
+    setSelectedSuiteId(s[0]?.suiteId || "");
+    setSelectedRequirementId(r[0]?.id || "");
+    setSelectedFixtureId(f[0]?.fixtureId || "");
     return { f, s, r };
-  }, []);
+  }, [projectId, setSelectedFixtureId]);
 
   async function reseed() {
     setSeeding(true);
@@ -316,17 +323,20 @@ export function RunPanel() {
     );
   }
 
+  // Populate the dropdowns on mount AND whenever the active project changes
+  // (refreshCatalog is keyed on projectId). A `?fixtureId=` deep-link is honoured
+  // only on the very first load, not when switching apps.
+  const didInitCatalog = useRef(false);
   useEffect(() => {
-    void refreshCatalog().then(({ f }) => {
-      if (!selectedFixtureId) {
-        setSelectedFixtureId(
-          searchParams.get("fixtureId") ?? f[0]?.fixtureId ?? "",
-        );
+    void refreshCatalog().then(() => {
+      if (!didInitCatalog.current) {
+        didInitCatalog.current = true;
+        const deep = searchParams.get("fixtureId");
+        if (deep) setSelectedFixtureId(deep);
       }
     });
-    // Only needs to run once on mount to populate the dropdowns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshCatalog]);
 
   // The currently selected id and a human label for the active scope, so the
   // single Run button and disabled-state logic don't branch every way. "all"
@@ -421,8 +431,54 @@ export function RunPanel() {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  // Switching apps re-points the catalog (handled by refreshCatalog, keyed on
+  // projectId) AND pre-fills the Target environment from that app's defaults.
+  function applyProject(id: string) {
+    setProjectId(id);
+    const proj = getProject(id);
+    if (proj) {
+      if (proj.brand) {
+        const host = hostFromUrl(proj.baseUrl) ?? "localhost";
+        setDomainBrand(host, proj.brand);
+      }
+      setEnvironment({ baseUrl: proj.baseUrl, apiUrl: proj.apiUrl });
+      setEnvPresetId("custom");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>App</CardTitle>
+          <CardDescription>
+            Which application&apos;s test catalog to run. Each app has its own
+            requirements, suites and fixtures; switching here re-points the lists
+            below and pre-fills the target with that app&apos;s defaults.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              className="h-9 min-w-56 rounded-md border border-border bg-muted px-3 text-sm"
+              value={projectId}
+              onChange={(event) => applyProject(event.target.value)}
+              disabled={running}
+            >
+              {PROJECTS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-muted-foreground">
+              {requirements.length} requirement(s) · {suites.length} suite(s) ·{" "}
+              {fixtures.length} fixture(s)
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Target environment</CardTitle>

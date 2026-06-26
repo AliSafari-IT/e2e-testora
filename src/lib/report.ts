@@ -139,7 +139,13 @@ function rowsTable(rows: ReportResultRow[]): string {
         }</td>
         <td class="num">${fmtDuration(r.durationMs)}</td>
         <td class="muted nowrap">${escapeHtml(fmtDateTime(r.createdAt))}</td>
-        <td class="err">${r.errorMessage ? escapeHtml(r.errorMessage) : ""}</td>
+        <td class="err">${r.errorMessage ? escapeHtml(r.errorMessage) : ""}${
+          r.screenshot
+            ? `<figure class="shot"><img src="${r.screenshot}" alt="Screenshot at failure of ${escapeHtml(
+                r.caseTitle,
+              )}" /><figcaption>Screenshot at failure</figcaption></figure>`
+            : ""
+        }</td>
       </tr>`,
     )
     .join("");
@@ -291,6 +297,11 @@ export function buildHtmlReport(
   td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
   td.err { color: var(--fail); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
     max-width: 520px; white-space: pre-wrap; word-break: break-word; }
+  figure.shot { margin: 8px 0 0; break-inside: avoid; page-break-inside: avoid; }
+  figure.shot img { display: block; width: 100%; max-width: 480px; height: auto;
+    border: 1px solid #e5e7eb; border-radius: 6px; }
+  figure.shot figcaption { margin-top: 3px; font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.04em; font-family: inherit; }
   .muted { color: var(--muted); } .nowrap { white-space: nowrap; }
   .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
   .pill.pass { background: #dcfce7; color: #166534; } .pill.fail { background: #fee2e2; color: #991b1b; }

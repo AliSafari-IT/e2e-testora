@@ -20,6 +20,10 @@ export const scriptTypeEnum = pgEnum("script_type", ["single", "multi", "scripte
 
 export const functionalRequirements = pgTable("functional_requirements", {
   id: text("id").primaryKey(),
+  // Which app/project this requirement belongs to. The Run page filters the
+  // whole catalog by the active project so a different target domain runs its
+  // OWN tests, not another app's. See src/data/projects.ts for the registry.
+  projectId: text("project_id").notNull().default("webapp"),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   // Environment root shared by every suite/fixture/case under this FR (e.g.

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -66,6 +66,9 @@ export async function executeFixture(
   const spec = generateTestSpec(fixture, cases);
   const dir = await mkdtemp(path.join(tmpdir(), "e2e-testora-"));
   const specPath = path.join(dir, `${fixture.fixtureId}.spec.js`);
+  // TestCafe writes failure screenshots here; we read + inline them, then the
+  // whole temp dir (specs + screenshots) is removed in `finally`.
+  const screenshotsDir = path.join(dir, "screenshots");
   await writeFile(specPath, spec, "utf8");
 
   const testcafe = await createTestCafe();
@@ -124,6 +127,9 @@ export async function executeFixture(
       failedCount = await runner
         .src(specPath)
         .browsers(browser)
+        // Auto-capture a screenshot the moment a test fails, so reports can show
+        // exactly what the page looked like at the point of failure.
+        .screenshots({ path: screenshotsDir, takeOnFails: true })
         .reporter(reporters)
         .run({
           // Local dev environments (Next.js JIT-compiling routes on first
@@ -164,13 +170,18 @@ export async function executeFixture(
         }
         const errorMessage =
           test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
+        // Per-test details: shared run info (target) plus this test's failure
+        // screenshot, if any.
+        const details = test.screenshot
+          ? { ...resultDetails, screenshot: test.screenshot }
+          : resultDetails;
         results.push(
           buildResult(
             caseId,
             test.failed ? "failed" : "passed",
             runIndex,
             test.durationMs,
-            resultDetails,
+            details,
             errorMessage,
           ),
         );
@@ -229,6 +240,25 @@ interface CapturedTest {
   errs: string[];
   durationMs: number;
   failed: boolean;
+  // A data-URL PNG of the page at the moment of failure (inlined so it travels
+  // with the stored result and the exported report). Undefined when not failed.
+  screenshot?: string;
+}
+
+// Read a TestCafe failure screenshot off disk and inline it as a data URL.
+// Skipped if it's missing or unreasonably large (keeps reports/DB rows sane).
+const MAX_SHOT_BYTES = 3_000_000;
+async function inlineScreenshot(
+  screenshotPath: string | undefined,
+): Promise<string | undefined> {
+  if (!screenshotPath) return undefined;
+  try {
+    const buf = await readFile(screenshotPath);
+    if (buf.byteLength > MAX_SHOT_BYTES) return undefined;
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
 }
 
 // Minimal view of the TestCafe ReporterPluginHost that our methods run on.
@@ -247,20 +277,36 @@ function createCaptureReporter(collector: CapturedTest[]) {
     return {
       reportTaskStart() {},
       reportFixtureStart() {},
-      reportTestDone(
+      async reportTestDone(
         name: string,
-        testRunInfo: { errs?: unknown[]; durationMs?: number },
+        testRunInfo: {
+          errs?: unknown[];
+          durationMs?: number;
+          screenshots?: Array<{ screenshotPath?: string; takenOnFail?: boolean }>;
+        },
       ) {
         const host = this as unknown as ReporterHost;
         const rawErrs = Array.isArray(testRunInfo.errs) ? testRunInfo.errs : [];
         const errs = rawErrs.map((err) =>
           host.formatError(err).replace(ANSI_PATTERN, "").trimEnd(),
         );
+        const failed = rawErrs.length > 0;
+        // Prefer the shot TestCafe took on failure; fall back to any screenshot.
+        const shots = Array.isArray(testRunInfo.screenshots)
+          ? testRunInfo.screenshots
+          : [];
+        const failShot =
+          shots.find((s) => s.takenOnFail)?.screenshotPath ??
+          shots[0]?.screenshotPath;
+        const screenshot = failed
+          ? await inlineScreenshot(failShot)
+          : undefined;
         collector.push({
           name,
           errs,
           durationMs: testRunInfo.durationMs ?? 0,
-          failed: rawErrs.length > 0,
+          failed,
+          screenshot,
         });
       },
       reportTaskDone() {},
@@ -481,8 +527,13 @@ export async function loadRequirementRunPlan(
 }
 
 /** Build a run plan covering every fixture of every functional requirement. */
-export async function loadAllRunPlan(): Promise<RunPlan | null> {
+export async function loadAllRunPlan(
+  projectId?: string,
+): Promise<RunPlan | null> {
   const frRows = await db.query.functionalRequirements.findMany({
+    where: projectId
+      ? eq(functionalRequirements.projectId, projectId)
+      : undefined,
     with: { suites: { with: { fixtures: { with: { cases: true } } } } },
   });
 
@@ -500,5 +551,6 @@ export async function loadAllRunPlan(): Promise<RunPlan | null> {
   }
 
   if (units.length === 0) return null;
-  return { label: `all requirements (${frRows.length})`, units };
+  const scope = projectId ? `${projectId} ` : "";
+  return { label: `all ${scope}requirements (${frRows.length})`, units };
 }

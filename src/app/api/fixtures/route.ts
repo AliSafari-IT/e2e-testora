@@ -5,8 +5,9 @@ import { db } from "@/db/client";
 import { testFixtures } from "@/db/schema";
 import { isValidFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
 
-export async function GET() {
-  const fixtures = await getTestFixtures();
+export async function GET(request: Request) {
+  const projectId = new URL(request.url).searchParams.get("project") || undefined;
+  const fixtures = await getTestFixtures(projectId);
   return NextResponse.json(
     fixtures.map((fixture) => ({
       fixtureId: fixture.fixtureId,

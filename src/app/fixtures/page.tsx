@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic";
 import { FixtureListView } from "@/components/entities/fixture-list";
 import { CollapsibleFixtureForm } from "@/components/forms/collapsible-fixture-form";
 import { getTestFixtures, getTestSuites, getTestCases, getLastResultByCase } from "@/lib/queries";
+import { getActiveProjectId } from "@/lib/active-project";
 import { aggregateResults, type LastResult } from "@/lib/run-status";
 
 export default async function FixturesPage() {
+  const projectId = await getActiveProjectId();
   const [fixtures, suites, cases, lastByCase] = await Promise.all([
-    getTestFixtures(),
-    getTestSuites(),
-    getTestCases(),
+    getTestFixtures(projectId),
+    getTestSuites(projectId),
+    getTestCases(projectId),
     getLastResultByCase(),
   ]);
   const suiteOptions = suites.map((suite) => ({ suiteId: suite.suiteId, title: suite.title }));

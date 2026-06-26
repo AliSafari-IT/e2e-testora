@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic";
 import { CollapsibleRequirementForm } from "@/components/forms/collapsible-requirement-form";
 import { RequirementCard } from "@/components/entities/requirement-card";
 import { getFunctionalRequirements } from "@/lib/queries";
+import { getActiveProjectId } from "@/lib/active-project";
 
 export default async function RequirementsPage() {
-  const requirements = await getFunctionalRequirements();
+  const requirements = await getFunctionalRequirements(await getActiveProjectId());
 
   return (
     <div className="flex flex-col gap-6">

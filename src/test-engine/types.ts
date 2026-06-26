@@ -1,5 +1,7 @@
 export interface FunctionalRequirementDefinition {
   id: string;
+  /** App/project this requirement belongs to (see src/data/projects.ts). */
+  projectId?: string;
   title: string;
   description: string;
   // Environment root shared by every fixture under this FR's suites (e.g.

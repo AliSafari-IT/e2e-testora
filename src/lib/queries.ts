@@ -32,8 +32,9 @@ export async function getLastResultByCase(): Promise<Map<string, LastResult>> {
   return map;
 }
 
-export async function getFunctionalRequirements() {
+export async function getFunctionalRequirements(projectId?: string) {
   return db.query.functionalRequirements.findMany({
+    where: projectId ? eq(functionalRequirements.projectId, projectId) : undefined,
     orderBy: desc(functionalRequirements.createdAt),
     with: { suites: true },
   });
@@ -46,11 +47,14 @@ export async function getFunctionalRequirementById(id: string) {
   });
 }
 
-export async function getTestSuites() {
-  return db.query.testSuites.findMany({
+export async function getTestSuites(projectId?: string) {
+  const suites = await db.query.testSuites.findMany({
     orderBy: desc(testSuites.createdAt),
     with: { functionalRequirement: true, fixtures: true },
   });
+  return projectId
+    ? suites.filter((s) => s.functionalRequirement?.projectId === projectId)
+    : suites;
 }
 
 export async function getTestSuiteById(suiteId: string) {
@@ -64,11 +68,17 @@ export async function getTestSuiteById(suiteId: string) {
 }
 
 /** Lightweight suite list for the Run page picker, with fixture/case counts. */
-export async function getSuiteSummaries() {
-  const suites = await db.query.testSuites.findMany({
+export async function getSuiteSummaries(projectId?: string) {
+  const all = await db.query.testSuites.findMany({
     orderBy: desc(testSuites.createdAt),
-    with: { fixtures: { with: { cases: { columns: { caseId: true } } } } },
+    with: {
+      functionalRequirement: { columns: { projectId: true } },
+      fixtures: { with: { cases: { columns: { caseId: true } } } },
+    },
   });
+  const suites = projectId
+    ? all.filter((s) => s.functionalRequirement?.projectId === projectId)
+    : all;
   return suites.map((suite) => ({
     suiteId: suite.suiteId,
     title: suite.title,
@@ -78,8 +88,9 @@ export async function getSuiteSummaries() {
 }
 
 /** Lightweight requirement list for the Run page picker, with suite/fixture/case counts. */
-export async function getRequirementSummaries() {
+export async function getRequirementSummaries(projectId?: string) {
   const requirements = await db.query.functionalRequirements.findMany({
+    where: projectId ? eq(functionalRequirements.projectId, projectId) : undefined,
     orderBy: desc(functionalRequirements.createdAt),
     with: { suites: { with: { fixtures: { with: { cases: { columns: { caseId: true } } } } } } },
   });
@@ -95,11 +106,17 @@ export async function getRequirementSummaries() {
   });
 }
 
-export async function getTestFixtures() {
-  return db.query.testFixtures.findMany({
+export async function getTestFixtures(projectId?: string) {
+  const fixtures = await db.query.testFixtures.findMany({
     orderBy: desc(testFixtures.createdAt),
-    with: { suite: true, cases: true },
+    with: {
+      suite: { with: { functionalRequirement: { columns: { projectId: true } } } },
+      cases: true,
+    },
   });
+  return projectId
+    ? fixtures.filter((f) => f.suite?.functionalRequirement?.projectId === projectId)
+    : fixtures;
 }
 
 export async function getTestFixtureById(fixtureId: string) {
@@ -112,11 +129,20 @@ export async function getTestFixtureById(fixtureId: string) {
   });
 }
 
-export async function getTestCases() {
-  return db.query.testCases.findMany({
+export async function getTestCases(projectId?: string) {
+  const cases = await db.query.testCases.findMany({
     orderBy: desc(testCases.createdAt),
-    with: { fixture: true },
+    with: {
+      fixture: {
+        with: { suite: { with: { functionalRequirement: { columns: { projectId: true } } } } },
+      },
+    },
   });
+  return projectId
+    ? cases.filter(
+        (c) => c.fixture?.suite?.functionalRequirement?.projectId === projectId,
+      )
+    : cases;
 }
 
 export async function getTestResults(limit = 50) {
@@ -145,6 +171,9 @@ export interface ReportResultRow {
   // The deployment origin this result ran against (e.g. http://localhost:3233),
   // used to attach a per-domain logo to exported reports.
   targetBaseUrl: string | null;
+  // A data-URL PNG of the page at the moment of failure, inlined so it shows in
+  // the Results UI and travels with the self-contained HTML/PDF export.
+  screenshot: string | null;
 }
 
 /**
@@ -152,8 +181,11 @@ export interface ReportResultRow {
  * (result → case → fixture → suite → functional requirement) so the Results
  * page can filter by any level and export a self-contained report.
  */
-export async function getResultsForReport(limit = 1000): Promise<ReportResultRow[]> {
-  const rows = await db.query.testResults.findMany({
+export async function getResultsForReport(
+  limit = 1000,
+  projectId?: string,
+): Promise<ReportResultRow[]> {
+  const all = await db.query.testResults.findMany({
     orderBy: desc(testResults.createdAt),
     limit,
     with: {
@@ -162,15 +194,24 @@ export async function getResultsForReport(limit = 1000): Promise<ReportResultRow
       },
     },
   });
+  const rows = projectId
+    ? all.filter(
+        (r) =>
+          r.case?.fixture?.suite?.functionalRequirement?.projectId === projectId,
+      )
+    : all;
 
   return rows.map((row) => {
     const fixture = row.case?.fixture;
     const suite = fixture?.suite;
     const fr = suite?.functionalRequirement;
-    const target = (row.details as Record<string, unknown> | null)?.targetBaseUrl;
+    const details = row.details as Record<string, unknown> | null;
+    const target = details?.targetBaseUrl;
+    const shot = details?.screenshot;
     return {
       id: row.id,
       targetBaseUrl: typeof target === "string" ? target : null,
+      screenshot: typeof shot === "string" ? shot : null,
       status: row.status,
       runIndex: row.runIndex,
       durationMs: row.durationMs,

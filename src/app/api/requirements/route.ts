@@ -4,8 +4,9 @@ import { db } from "@/db/client";
 import { functionalRequirements } from "@/db/schema";
 import { getRequirementSummaries } from "@/lib/queries";
 
-export async function GET() {
-  return NextResponse.json(await getRequirementSummaries());
+export async function GET(request: Request) {
+  const projectId = new URL(request.url).searchParams.get("project") || undefined;
+  return NextResponse.json(await getRequirementSummaries(projectId));
 }
 
 const createSchema = z.object({

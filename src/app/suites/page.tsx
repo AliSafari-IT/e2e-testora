@@ -8,13 +8,15 @@ import {
   getTestCases,
   getLastResultByCase,
 } from "@/lib/queries";
+import { getActiveProjectId } from "@/lib/active-project";
 import { aggregateResults, type LastResult } from "@/lib/run-status";
 
 export default async function SuitesPage() {
+  const projectId = await getActiveProjectId();
   const [suites, requirements, cases, lastByCase] = await Promise.all([
-    getTestSuites(),
-    getFunctionalRequirements(),
-    getTestCases(),
+    getTestSuites(projectId),
+    getFunctionalRequirements(projectId),
+    getTestCases(projectId),
     getLastResultByCase(),
   ]);
   const frOptions = requirements.map((fr) => ({ id: fr.id, title: fr.title }));

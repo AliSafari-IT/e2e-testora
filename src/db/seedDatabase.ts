@@ -74,12 +74,27 @@ import {
   userWorkspaceFixtures,
   userWorkspaceCases,
 } from "@/data/user-workspace";
+import {
+  contactSupportFR,
+  contactSupportSuites,
+  contactSupportFixtures,
+  contactSupportCases,
+} from "@/data/contact-flow";
+import { DEFAULT_PROJECT_ID } from "@/data/projects";
+import {
+  asafarimPortalAuthFR,
+  asafarimPortalSuites,
+  asafarimPortalFixtures,
+  asafarimPortalCases,
+} from "@/data/asafarim/portal-auth";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
   suites: TestSuiteDefinition[];
   fixtures: TestFixtureDefinition[];
   cases: TestCaseDefinition[];
+  /** App this bundle belongs to; defaults to the original web app. */
+  projectId?: string;
 }
 
 const bundles: SeedBundle[] = [
@@ -149,6 +164,20 @@ const bundles: SeedBundle[] = [
     fixtures: userWorkspaceFixtures,
     cases: userWorkspaceCases,
   },
+  {
+    fr: contactSupportFR,
+    suites: contactSupportSuites,
+    fixtures: contactSupportFixtures,
+    cases: contactSupportCases,
+  },
+  // ── ASafariM apps (projectId: "asafarim") ──────────────────────────────────
+  {
+    fr: asafarimPortalAuthFR,
+    suites: asafarimPortalSuites,
+    fixtures: asafarimPortalFixtures,
+    cases: asafarimPortalCases,
+    projectId: "asafarim",
+  },
 ];
 
 export interface SeedSummary {
@@ -176,10 +205,14 @@ export async function seedDatabase(): Promise<SeedResult> {
   const perRequirement: SeedSummary[] = [];
 
   for (const bundle of bundles) {
+    const frRow = {
+      ...bundle.fr,
+      projectId: bundle.projectId ?? bundle.fr.projectId ?? DEFAULT_PROJECT_ID,
+    };
     await db
       .insert(functionalRequirements)
-      .values(bundle.fr)
-      .onConflictDoUpdate({ target: functionalRequirements.id, set: bundle.fr });
+      .values(frRow)
+      .onConflictDoUpdate({ target: functionalRequirements.id, set: frRow });
 
     for (const suite of bundle.suites) {
       await db

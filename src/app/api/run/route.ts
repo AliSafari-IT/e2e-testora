@@ -138,9 +138,13 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
+  const projectId =
+    body && typeof body === "object" && typeof body.projectId === "string"
+      ? body.projectId
+      : undefined;
   const plan =
     "all" in data
-      ? await loadAllRunPlan()
+      ? await loadAllRunPlan(projectId)
       : "fixtureId" in data
         ? await loadFixtureRunPlan(data.fixtureId)
         : "suiteId" in data
