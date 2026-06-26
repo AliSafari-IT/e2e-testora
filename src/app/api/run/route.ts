@@ -22,6 +22,7 @@ import {
   getActiveRun,
 } from "@/test-engine/executors/runLog";
 import type { FormattedReport } from "@/test-engine/types";
+import { getActiveProjectId } from "@/lib/active-project";
 
 // Reads live in-memory run state, so it must never be statically cached.
 export const dynamic = "force-dynamic";
@@ -138,10 +139,14 @@ export async function POST(request: Request) {
   }
 
   const data = parsed.data;
-  const projectId =
+  // Scope an "all requirements" run to the active app. Prefer the project the
+  // client sent, but fall back to the active-project cookie (set by the app
+  // badge/selector) so the run is always scoped even if the body omits it.
+  const bodyProjectId =
     body && typeof body === "object" && typeof body.projectId === "string"
       ? body.projectId
       : undefined;
+  const projectId = bodyProjectId || (await getActiveProjectId());
   const plan =
     "all" in data
       ? await loadAllRunPlan(projectId)

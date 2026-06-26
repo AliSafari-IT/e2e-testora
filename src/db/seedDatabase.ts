@@ -87,6 +87,12 @@ import {
   asafarimPortalFixtures,
   asafarimPortalCases,
 } from "@/data/asafarim/portal-auth";
+import {
+  edumatchFR,
+  edumatchSuites,
+  edumatchFixtures,
+  edumatchCases,
+} from "@/data/asafarim/edumatch";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
@@ -176,6 +182,13 @@ const bundles: SeedBundle[] = [
     suites: asafarimPortalSuites,
     fixtures: asafarimPortalFixtures,
     cases: asafarimPortalCases,
+    projectId: "asafarim",
+  },
+  {
+    fr: edumatchFR,
+    suites: edumatchSuites,
+    fixtures: edumatchFixtures,
+    cases: edumatchCases,
     projectId: "asafarim",
   },
 ];
