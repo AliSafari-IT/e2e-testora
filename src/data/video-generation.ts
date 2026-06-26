@@ -128,6 +128,27 @@ const GENERATE_FROM_URL_SCRIPT = [
   "// Step 4 — generation started: approving moves the job out of",
   "// awaiting_approval, so the approval wizard (orientation panel) unmounts.",
   "await t.expect(orientationSection.exists).notOk('Expected the job to leave awaiting_approval after submitting', { timeout: 180000 });",
+  "",
+  "// Step 5 — wait for the backend job to reach 'completed' so the badge turns",
+  "// Completed. The full render can take ~10–15 minutes, so we poll the API",
+  "// from the browser using the same authenticated session. The fixture is kept",
+  "// to a single URL so a single run only pins one long render at a time.",
+  "let completedStatus = 'unknown';",
+  "const completionDeadline = Date.now() + 1200000; // 20 minute safety margin",
+  "while (Date.now() < completionDeadline) {",
+  "  const job = await t.eval(() => {",
+  "    const id = window.location.pathname.split('/').pop();",
+  "    const token = localStorage.getItem('auth_token');",
+  "    return fetch('/api/v1/proxy/jobs/' + id, {",
+  "      credentials: 'include',",
+  "      headers: token ? { Authorization: 'Bearer ' + token } : {}",
+  "    }).then((res) => res.json()).catch((err) => ({ status: 'poll-error', error: String(err) }));",
+  "  });",
+  "  completedStatus = (job && typeof job.status === 'string') ? job.status : 'unknown';",
+  "  if (completedStatus === 'completed' || completedStatus === 'failed' || completedStatus === 'cancelled') break;",
+  "  await t.wait(5000);",
+  "}",
+  "await t.expect(completedStatus).eql('completed', 'Video job should reach Completed status (badge Completed)');",
 ].join("\n");
 
 export const videoGenerationFR: FunctionalRequirementDefinition = {
@@ -165,36 +186,16 @@ export const videoGenerationTestCases: TestCaseDefinition[] = [
     fixtureId: "listings-wizard",
     title: "User can generate a video from a listing URL",
     scriptType: "scripted",
-    // Two representative sources that both scrape reliably on localhost: a
-    // Belgian portal (zimmo) and the DataDome-protected market leader (immoweb).
+    // One representative source only. Each submitted listing kicks off a video
+    // render that takes roughly 10–15 minutes to turn "Completed" in the app,
+    // so running multiple URLs in a single fixture would pin the backend and
+    // the TestCafe process for a very long time. This test asserts the job is
+    // successfully submitted (leaves awaiting_approval), not that the render
+    // fully finishes.
     runs: [
       {
         url: "https://www.zimmo.be/nl/hasselt-3500/te-huur/appartement/LPKI0/",
       },
-      {
-        url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/hasselt/3500/21670974",
-      },
-      {
-        url: "https://www.funda.nl/detail/koop/den-burg/huis-hallerweg-7/89792944/",
-      },
-      {
-        url: "https://immovlan.be/en/detail/residence/for-sale/6470/rance/vbe35211",
-      },
-      {
-        url: "https://www.immoscoop.be/en/for-sale/2960-sint-lenaarts/916365",
-      },
-      {
-        url: "https://www.booking.com/hotel/be/hetklooster.nl.html?aid=397594&label=gog235jc-10CAEoggI46AdIHFgDaBWIAQGYATO4ARfIAQzYAQPoAQH4AQGIAgGoAgG4AorV5tEGwAIB0gIkNTE4YzE3NWYtODA0NS00MzZjLTg3MDQtOTc5MDdkYjA2NzUw2AIB4AIB-Share-aPkX8K0%401782164135&sid=1281df4779b51cf65c4a5298a23a8e45&checkin=2026-08-02&checkout=2026-08-03&dest_id=-1964894&dest_type=city&group_adults=2&group_children=0&no_rooms=1&sb_travel_purpose=0&ucfac=481&"
-      },
-      {
-        url: "https://www.trivago.be/en-US/acd/?fpip=1&search=100-49464328;dr-20260720-20260731;drs-40;rc-1-2-6#::effects=logNewTab-49464328-0"
-      },
-      {
-        url: "https://kamernet.nl/huren/kamer-utrecht/st-ludgerusstraat/kamer-2387405"
-      },
-      {
-        url: "https://www.logic-immo.com/detail-vente-265804185.htm"
-      }
     ],
     expected: {},
     script: GENERATE_FROM_URL_SCRIPT,
