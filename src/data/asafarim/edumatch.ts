@@ -190,10 +190,15 @@ await t.eval(() => {
 // generation stalls (e.g. provider rate-limit on rapid back-to-back questions).
 const aiBtn = Selector('button[class*="--color-primary"][class*="px-4"]').filterVisible();
 const reqBtn = Selector('button').withText('Request Tutor Quotes');
+if (await aiBtn.exists) { await t.click(aiBtn); }
+// Poll for the green button (NB: \`await selector.exists\` is a snapshot, so we
+// drive the wait with t.wait — up to ~150s). Re-ask once midway if the live AI
+// generation stalls (provider rate-limit on rapid back-to-back questions).
 let gotReq = false;
-for (let attempt = 0; attempt < 2; attempt++) {
-  if (await aiBtn.exists) { await t.click(aiBtn); }
-  if (await reqBtn.with({ timeout: 120000 }).exists) { gotReq = true; break; }
+for (let i = 0; i < 150; i++) {
+  if (await reqBtn.exists) { gotReq = true; break; }
+  if (i === 90 && await aiBtn.exists) { await t.click(aiBtn); }
+  await t.wait(1000);
 }
 await t.expect(gotReq).ok('Ask AI should produce a response and reveal "Request Tutor Quotes"');
 await t.click(reqBtn.filterVisible());

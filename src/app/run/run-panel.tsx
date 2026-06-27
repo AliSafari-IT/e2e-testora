@@ -13,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
+  Camera,
   Check,
   Copy,
   Database,
@@ -23,6 +24,7 @@ import {
   StopCircle,
   Terminal,
 } from "lucide-react";
+import { ScreenshotLightbox } from "@/components/results/screenshot-lightbox";
 import {
   useRun,
   type RunScope,
@@ -224,6 +226,7 @@ export function RunPanel() {
     cancelRun,
   } = useRun();
   const [scope, setScope] = useState<RunScope>("fixture");
+  const [shotZoom, setShotZoom] = useState<string | null>(null);
   const [includeHeavy, setIncludeHeavy] = useState(false);
   const [includeUi, setIncludeUi] = useState(false);
   const [fixtures, setFixtures] = useState<FixtureSummary[]>([]);
@@ -881,25 +884,45 @@ export function RunPanel() {
           <CardContent className="flex flex-col gap-2">
             {reports.map((report, index) => {
               const failed = report.status !== "passed";
+              const shot =
+                typeof report.details?.screenshot === "string"
+                  ? report.details.screenshot
+                  : null;
               return (
                 <div
                   key={`${report.fixtureId}-${report.caseId}-${index}`}
                   className={cn(
-                    "flex items-center justify-between rounded-md border px-4 py-2",
+                    "flex items-center justify-between gap-3 rounded-md border px-4 py-2",
                     failed
                       ? "border-destructive/40 bg-destructive/5"
                       : "border-border",
                   )}
                 >
-                  <span className="text-sm">{report.case}</span>
-                  <Badge variant={failed ? "destructive" : "success"}>
-                    {report.status}
-                  </Badge>
+                  <span className="min-w-0 truncate text-sm">{report.case}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {shot && (
+                      <button
+                        type="button"
+                        onClick={() => setShotZoom(shot)}
+                        title="View failure screenshot"
+                        className="rounded p-0.5 text-amber-500 transition-colors hover:bg-amber-500/10"
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <Badge variant={failed ? "destructive" : "success"}>
+                      {report.status}
+                    </Badge>
+                  </div>
                 </div>
               );
             })}
           </CardContent>
         </Card>
+      )}
+
+      {shotZoom && (
+        <ScreenshotLightbox src={shotZoom} onClose={() => setShotZoom(null)} />
       )}
     </div>
   );
