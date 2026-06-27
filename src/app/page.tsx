@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { getFunctionalRequirements, getTestFixtures, getTestCases, getTestResults } from "@/lib/queries";
+import { LatestResultRow } from "@/components/dashboard/latest-result";
 import { ListChecks, FlaskConical, PlayCircle, FileBarChart } from "lucide-react";
 
 export default async function DashboardPage() {
@@ -42,12 +42,21 @@ export default async function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          {results.map((result) => (
-            <div key={result.id} className="flex items-center justify-between rounded-md border border-border px-4 py-2">
-              <span className="text-sm">{result.case?.title ?? result.caseId}</span>
-              <Badge variant={statusVariant(result.status)}>{result.status}</Badge>
-            </div>
-          ))}
+          {results.map((result) => {
+            const details = (result.details ?? {}) as Record<string, unknown>;
+            const screenshot = typeof details.screenshot === "string" ? details.screenshot : null;
+            return (
+              <LatestResultRow
+                key={result.id}
+                result={{
+                  id: result.id,
+                  status: result.status,
+                  title: result.case?.title ?? result.caseId,
+                  screenshot,
+                }}
+              />
+            );
+          })}
         </CardContent>
       </Card>
     </div>
@@ -78,8 +87,3 @@ function StatCard({
   );
 }
 
-function statusVariant(status: string): "success" | "destructive" | "muted" {
-  if (status === "passed") return "success";
-  if (status === "failed" || status === "error") return "destructive";
-  return "muted";
-}

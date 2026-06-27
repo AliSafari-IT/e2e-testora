@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useRun } from "@/components/run-provider";
 import { Logo } from "@/components/logo";
+import { TourTrigger } from "@/components/run/run-tour";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -122,6 +123,9 @@ export function SidebarNav() {
             );
           })}
         </nav>
+        <div className="px-2 pb-4">
+          <TourTrigger className="flex w-full items-center gap-3 rounded-md border-0 px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-primary" />
+        </div>
         <div className="px-2 text-xs text-muted-foreground">
           e2e-testing-db &middot; PostgreSQL
         </div>

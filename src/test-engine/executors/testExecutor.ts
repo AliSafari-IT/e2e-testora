@@ -178,9 +178,18 @@ export async function executeFixture(
         const errorMessage =
           test.errs.length > 0 ? test.errs.join("\n\n").slice(0, 8000) : null;
         // Per-test details: shared run info (target) plus this test's failure
-        // screenshot, if any.
-        const details = test.screenshot
-          ? { ...resultDetails, screenshot: test.screenshot }
+        // screenshot, if any. Read the screenshot file now, after the run has
+        // finished but before the temp directory is removed.
+        const screenshot = test.failed
+          ? await inlineScreenshot(test.screenshotPath, options.onLog)
+          : undefined;
+        if (test.failed && !screenshot) {
+          options.onLog?.(
+            `⚠ No failure screenshot captured for "${test.name}" (path: ${test.screenshotPath ?? "none"}).`,
+          );
+        }
+        const details = screenshot
+          ? { ...resultDetails, screenshot }
           : resultDetails;
         results.push(
           buildResult(
@@ -247,9 +256,10 @@ interface CapturedTest {
   errs: string[];
   durationMs: number;
   failed: boolean;
-  // A data-URL PNG of the page at the moment of failure (inlined so it travels
-  // with the stored result and the exported report). Undefined when not failed.
-  screenshot?: string;
+  // Path to the screenshot TestCafe took on failure, if any. The file is read
+  // and inlined *after* the run finishes so the temp directory is guaranteed
+  // to still exist, avoiding a race with the reporter callback.
+  screenshotPath?: string;
 }
 
 // Read a TestCafe failure screenshot off disk and inline it as a data URL.
@@ -257,13 +267,20 @@ interface CapturedTest {
 const MAX_SHOT_BYTES = 3_000_000;
 async function inlineScreenshot(
   screenshotPath: string | undefined,
+  log?: (line: string) => void,
 ): Promise<string | undefined> {
   if (!screenshotPath) return undefined;
   try {
     const buf = await readFile(screenshotPath);
-    if (buf.byteLength > MAX_SHOT_BYTES) return undefined;
+    if (buf.byteLength > MAX_SHOT_BYTES) {
+      log?.(
+        `⚠ Screenshot ${screenshotPath} (${(buf.byteLength / 1_000_000).toFixed(1)} MB) exceeds ${MAX_SHOT_BYTES / 1_000_000} MB; skipping inline.`,
+      );
+      return undefined;
+    }
     return `data:image/png;base64,${buf.toString("base64")}`;
-  } catch {
+  } catch (err) {
+    log?.(`⚠ Failed to read screenshot ${screenshotPath}: ${err}`);
     return undefined;
   }
 }
@@ -284,7 +301,7 @@ function createCaptureReporter(collector: CapturedTest[]) {
     return {
       reportTaskStart() {},
       reportFixtureStart() {},
-      async reportTestDone(
+      reportTestDone(
         name: string,
         testRunInfo: {
           errs?: unknown[];
@@ -302,18 +319,15 @@ function createCaptureReporter(collector: CapturedTest[]) {
         const shots = Array.isArray(testRunInfo.screenshots)
           ? testRunInfo.screenshots
           : [];
-        const failShot =
+        const screenshotPath =
           shots.find((s) => s.takenOnFail)?.screenshotPath ??
           shots[0]?.screenshotPath;
-        const screenshot = failed
-          ? await inlineScreenshot(failShot)
-          : undefined;
         collector.push({
           name,
           errs,
           durationMs: testRunInfo.durationMs ?? 0,
           failed,
-          screenshot,
+          screenshotPath,
         });
       },
       reportTaskDone() {},

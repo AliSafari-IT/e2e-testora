@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { RunPanel } from "./run-panel";
+import { RunTour } from "@/components/run/run-tour";
 
 export default function RunPage() {
   return (
@@ -11,6 +12,7 @@ export default function RunPage() {
       <Suspense>
         <RunPanel />
       </Suspense>
+      <RunTour />
     </div>
   );
 }

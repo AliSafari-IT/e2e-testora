@@ -451,7 +451,7 @@ export function RunPanel() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
+      <Card data-tour="app">
         <CardHeader>
           <CardTitle>App</CardTitle>
           <CardDescription>
@@ -482,7 +482,7 @@ export function RunPanel() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="target">
         <CardHeader>
           <CardTitle>Target environment</CardTitle>
           <CardDescription>
@@ -569,7 +569,7 @@ export function RunPanel() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card data-tour="select">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -720,6 +720,7 @@ export function RunPanel() {
             )}
 
             <Button
+              data-tour="run"
               onClick={() => startRun({ scope, id: selectedId, includeHeavy, includeUi })}
               disabled={running || !canRun}
             >
