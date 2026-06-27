@@ -42,6 +42,7 @@ import {
 } from "@/lib/report";
 import { saveTextFile } from "@/lib/save-file";
 import { getDomainBrands, hostFromUrl } from "@/lib/domain-logos";
+import { getProject } from "@/data/projects";
 import { useRun } from "@/components/run-provider";
 
 /** A result counts as re-runnable when it didn't pass and carries the ids a run needs. */
@@ -79,6 +80,38 @@ function errorPreview(message: string): string {
   return firstLine.length > 100 ? `${firstLine.slice(0, 100)}…` : firstLine;
 }
 
+/** Filename-safe token: alphanumerics kept, everything else collapsed to "-". */
+function slug(value: string): string {
+  return (
+    value
+      .normalize("NFKD")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "Unknown"
+  );
+}
+
+/** App name for the export filename: the chosen app filter, else the single app
+ *  present in the rows, else "AllApps". */
+function exportAppName(app: string, rows: ReportResultRow[]): string {
+  if (app) return getProject(app)?.name ?? app;
+  const ids = [...new Set(rows.map((r) => r.projectId).filter(Boolean))];
+  const only = ids[0];
+  if (ids.length === 1 && only) return getProject(only)?.name ?? only;
+  return "AllApps";
+}
+
+/** Target host for the export filename: the chosen target filter, else the
+ *  single domain present in the rows, else "AllTargets". */
+function exportTargetEnv(target: string, rows: ReportResultRow[]): string {
+  if (target) return hostFromUrl(target) ?? target;
+  const urls = [
+    ...new Set(rows.map((r) => r.targetBaseUrl).filter((u): u is string => Boolean(u))),
+  ];
+  const only = urls[0];
+  if (urls.length === 1 && only) return hostFromUrl(only) ?? only;
+  return "AllTargets";
+}
+
 /** The configured branding for the distinct domains present in the exported rows. */
 function brandsForRows(rows: ReportResultRow[]): ReportBrand[] {
   const stored = getDomainBrands();
@@ -110,6 +143,8 @@ export function ResultsExplorer({
   const [fixtureId, setFixtureId] = useState("");
   const [caseId, setCaseId] = useState("");
   const [status, setStatus] = useState("");
+  const [app, setApp] = useState("");
+  const [target, setTarget] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState<"json" | "html" | null>(null);
@@ -162,6 +197,25 @@ export function ResultsExplorer({
     () => [...new Set(rows.map((r) => r.status))].sort(),
     [rows],
   );
+  // App options: the distinct projects present in the results, labelled from the
+  // registry (falling back to the raw id for legacy/removed apps).
+  const appOptions = useMemo(() => {
+    const ids = [...new Set(rows.map((r) => r.projectId).filter(Boolean))];
+    return ids
+      .map((id) => ({ id, label: getProject(id)?.name ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [rows]);
+  // Target options: the distinct deployment origins runs executed against.
+  const targetOptions = useMemo(() => {
+    const urls = [
+      ...new Set(
+        rows.map((r) => r.targetBaseUrl).filter((u): u is string => Boolean(u)),
+      ),
+    ];
+    return urls
+      .map((url) => ({ url, label: hostFromUrl(url) ?? url }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const fromTs = from ? new Date(from).getTime() : null;
@@ -173,6 +227,8 @@ export function ResultsExplorer({
       if (fixtureId && r.fixtureId !== fixtureId) return false;
       if (caseId && r.caseId !== caseId) return false;
       if (status && r.status !== status) return false;
+      if (app && r.projectId !== app) return false;
+      if (target && r.targetBaseUrl !== target) return false;
       const ts = new Date(r.createdAt).getTime();
       if (fromTs != null && ts < fromTs) return false;
       if (toTs != null && ts > toTs) return false;
@@ -183,11 +239,11 @@ export function ResultsExplorer({
       }
       return true;
     });
-  }, [rows, frId, suiteId, fixtureId, caseId, status, from, to, search]);
+  }, [rows, frId, suiteId, fixtureId, caseId, status, app, target, from, to, search]);
 
   const summary = useMemo(() => summarize(filtered), [filtered]);
   const hasFilters = Boolean(
-    frId || suiteId || fixtureId || caseId || status || from || to || search,
+    frId || suiteId || fixtureId || caseId || status || app || target || from || to || search,
   );
 
   const selectedRows = useMemo(
@@ -226,6 +282,8 @@ export function ResultsExplorer({
     setFixtureId("");
     setCaseId("");
     setStatus("");
+    setApp("");
+    setTarget("");
     setFrom("");
     setTo("");
   }
@@ -275,9 +333,12 @@ export function ResultsExplorer({
         kind === "json"
           ? buildJsonReport(rowsToExport, meta)
           : buildHtmlReport(rowsToExport, meta, brandsForRows(rowsToExport));
-      const fallback = kind === "json" ? "test-results" : "test-report";
+      // TestReport_<AppName>_<TargetEnv>_<datetime>.<ext>
+      const suggestedName = `TestReport_${slug(exportAppName(app, rowsToExport))}_${slug(
+        exportTargetEnv(target, rowsToExport),
+      )}_${dateStamp()}.${kind}`;
       const outcome = await saveTextFile(content, {
-        suggestedName: `${fallback}_${dateStamp()}.${kind}`,
+        suggestedName,
         mimeType: kind === "json" ? "application/json" : "text/html",
         extension: kind,
         description: kind === "json" ? "JSON test report" : "HTML test report",
@@ -448,6 +509,36 @@ export function ResultsExplorer({
               {statusOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">App</span>
+            <select
+              className={selectClass}
+              value={app}
+              onChange={(e) => setApp(e.target.value)}
+            >
+              <option value="">All</option>
+              {appOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Target (domain)</span>
+            <select
+              className={selectClass}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            >
+              <option value="">All</option>
+              {targetOptions.map((o) => (
+                <option key={o.url} value={o.url}>
+                  {o.label}
                 </option>
               ))}
             </select>

@@ -168,6 +168,8 @@ export interface ReportResultRow {
   suiteTitle: string;
   frId: string;
   frTitle: string;
+  // The app/project this result belongs to (via its functional requirement).
+  projectId: string;
   // The deployment origin this result ran against (e.g. http://localhost:3233),
   // used to attach a per-domain logo to exported reports.
   targetBaseUrl: string | null;
@@ -210,6 +212,7 @@ export async function getResultsForReport(
     const shot = details?.screenshot;
     return {
       id: row.id,
+      projectId: fr?.projectId ?? "",
       targetBaseUrl: typeof target === "string" ? target : null,
       screenshot: typeof shot === "string" ? shot : null,
       status: row.status,
