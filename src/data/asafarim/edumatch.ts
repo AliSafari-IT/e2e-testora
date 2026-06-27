@@ -103,8 +103,9 @@ export const edumatchStudentFixture: TestFixtureDefinition = {
   baseUrl: "/",
   commonInput: {},
   // Browser flow + an external SSR app (ignore its benign client errors). Each
-  // run creates a real inquiry and triggers a live AI generation.
-  metadata: { ui: true, skipJsErrors: true },
+  // run creates a real inquiry and triggers a live AI generation. `flaky` re-runs
+  // a failed test (transient DNS / AI rate-limit against the live app).
+  metadata: { ui: true, skipJsErrors: true, flaky: true },
 };
 
 const edumatchStudentCases: TestCaseDefinition[] = [
@@ -227,11 +228,10 @@ export const edumatchTutorFixture: TestFixtureDefinition = {
   title: "Tutor submits a quote on an open request",
   baseUrl: "/",
   commonInput: {},
-  // PRECONDITION: the teacher account must be an onboarded, verified tutor, and
-  // there must be at least one open quote request matching them (i.e. a student
-  // requested tutor quotes for a question this tutor can serve). Without that,
-  // the requests list is empty and the test reports it clearly.
-  metadata: { ui: true, skipJsErrors: true },
+  // Self-onboards the tutor (creates a profile whose subjects match the
+  // student's questions). PRECONDITION: the Student fixture must have run first
+  // in this requirement so there's an open, subject-matching request to quote.
+  metadata: { ui: true, skipJsErrors: true, flaky: true },
 };
 
 const edumatchTutorCases: TestCaseDefinition[] = [
@@ -248,26 +248,75 @@ const edumatchTutorCases: TestCaseDefinition[] = [
         "/tutor/requests",
       ) +
       `
-// Each open request is a full-width card header button (text-left + p-5).
-const reqHeader = Selector('button[class*="text-left"][class*="p-5"]').filterVisible();
-await t.expect(reqHeader.with({ timeout: 20000 }).exists).ok('expected at least one open quote request — the teacher must be an onboarded, verified tutor and a student must have requested quotes for a matching question');
-await t.click(reqHeader);
+// Geolocation backstop for the requests page (it asks for the tutor's location).
+await t.setNativeDialogHandler((type) => {
+  if (type === 'geolocation') return { latitude: 50.8503, longitude: 4.3517 };
+  return null;
+});
 
-// The expanded form pre-fills rate (€30) and hours (2); add one availability
-// slot (start + end) and a note, then submit.
-const slotStart = Selector('input[type="datetime-local"]').filterVisible().nth(0);
-const slotEnd = Selector('input[type="datetime-local"]').filterVisible().nth(1);
-await t.expect(slotStart.with({ timeout: 15000 }).exists).ok('the quote form should expand with an availability slot');
-await t.typeText(slotStart, '2026-12-01T10:00', { replace: true });
-await t.typeText(slotEnd, '2026-12-01T11:00', { replace: true });
-await t.typeText(Selector('textarea').filterVisible(), 'Automated e2e tutor quote — happy to help with this topic.', { replace: true });
+// ── Onboard: give the tutor a profile whose subjects match the student's ────
+// questions (Mathematics/Physics/Chemistry). The matching is by subject, and a
+// tutor profile is required to see any requests. We set it via a same-origin
+// fetch (carries the session cookie, unlike t.request; the i18n toggle buttons
+// are unreliable to drive). \`onlineOnly\` drops the distance filter so any
+// subject-matching request is visible. POST upserts, so re-runs are fine.
+const onboardStatus = await t.eval(() => {
+  return fetch('/api/tutor/profile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subjectsTaught: ['Mathematics', 'Physics', 'Chemistry'],
+      levelsTaught: ['K12', 'UNDERGRAD', 'GRAD'],
+      hourlyRateCents: 2500,
+      onlineOnly: true,
+      homeAddress: { line1: 'Test 1', city: 'Brussels', postalCode: '1000', country: 'Belgium' },
+    }),
+  }).then(function (r) { return r.status; }).catch(function () { return -1; });
+});
+await t.expect(onboardStatus >= 200 && onboardStatus < 300).ok('creating the tutor profile should succeed (POST /api/tutor/profile) — got status ' + onboardStatus);
 
-// Submit is the primary button (bg-[var(--color-primary)] + px-4) inside the form.
-await t.click(Selector('button[class*="--color-primary"][class*="px-4"]').filterVisible());
-await t.wait(4000);
+// Reload the requests page now that the profile + subjects exist.
+await t.navigateTo(eduOrigin + '/tutor/requests');
+await t.wait(3000);
 
-// Success: no error banner appeared and the request left the open list.
-await t.expect(Selector('[class*="bg-red-50"]').filterVisible().exists).notOk('submitting the quote should not surface an error');
+// ── Find a matching open request and submit a quote ─────────────────────────
+// Each open request is a full-width card header button (text-left + p-5). Poll
+// (\`.exists\` is a snapshot, so drive the wait with t.wait).
+const reqHeaders = Selector('button[class*="text-left"][class*="p-5"]').filterVisible();
+let hasReq = false;
+for (let i = 0; i < 20; i++) { if (await reqHeaders.exists) { hasReq = true; break; } await t.wait(1000); }
+await t.expect(hasReq).ok('expected an open quote request for a subject the tutor teaches — run the Student fixture first so a matching request exists');
+
+// The list isn't de-duped by the tutor's own past quotes, so a request quoted
+// in a previous run errors with "already submitted". Try each open request
+// until one accepts the quote (the student just created 3 fresh ones this run).
+const count = await reqHeaders.count;
+let submitted = false; let lastErr = '';
+for (let idx = 0; idx < count && !submitted; idx++) {
+  await t.click(reqHeaders.nth(idx)); // expand (collapses any other open form)
+  const slotStart = Selector('input[type="datetime-local"]').filterVisible().nth(0);
+  const slotEnd = Selector('input[type="datetime-local"]').filterVisible().nth(1);
+  if (!(await slotStart.with({ timeout: 12000 }).exists)) continue;
+  // Pre-filled rate + hours; add one availability slot and a note.
+  await t.typeText(slotStart, '2026-12-01T10:00', { replace: true });
+  await t.typeText(slotEnd, '2026-12-01T11:00', { replace: true });
+  await t.typeText(Selector('textarea').filterVisible(), 'Automated e2e tutor quote — happy to help with this topic.', { replace: true });
+  await t.click(Selector('button[class*="--color-primary"][class*="px-4"]').filterVisible());
+  // Poll for the "Quote Sent" confirmation (the request moves to the "Already
+  // Quoted" section). We check this positive signal rather than sniffing for an
+  // error banner, because the navbar notification count is a red badge whose
+  // class false-matches a bg-red-50 selector. No "Quote Sent" → this request was
+  // likely already quoted (or a transient error) → try the next one.
+  for (let w = 0; w < 8; w++) {
+    if (await Selector('body').withText('Quote Sent').exists) { submitted = true; break; }
+    await t.wait(1000);
+  }
+  if (!submitted) {
+    const err = Selector('[class~="bg-red-50"]').filterVisible();
+    if (await err.exists) lastErr = (await err.innerText).replace(/\\s+/g, ' ').slice(0, 200);
+  }
+}
+await t.expect(submitted).ok('the tutor should submit a quote and see "Quote Sent" in Already Quoted (last error: ' + lastErr + ')');
 `,
   },
 ];

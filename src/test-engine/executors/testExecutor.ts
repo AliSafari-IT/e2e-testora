@@ -142,6 +142,13 @@ export async function executeFixture(
           // is busy. The default 2 min is what surfaces as "Cannot establish
           // browser connection".
           browserInitTimeout: BROWSER_INIT_TIMEOUT,
+          // Fixtures flagged `flaky` (e.g. tests against external production
+          // apps prone to transient DNS/network/AI-rate-limit hiccups) re-run a
+          // failed test up to 3× and pass if it succeeds once. Stable fixtures
+          // are unaffected (a passing test still runs once).
+          ...(fixture.metadata?.flaky
+            ? { quarantineMode: { attemptLimit: 3, successThreshold: 1 } }
+            : {}),
         });
     } catch (runErr) {
       // When the run is cancelled via runner.stop(), TestCafe / chrome-remote-interface
