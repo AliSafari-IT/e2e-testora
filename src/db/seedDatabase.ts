@@ -1,4 +1,5 @@
 import { db } from "@/db/client";
+import { notInArray } from "drizzle-orm";
 import { functionalRequirements, testSuites, testFixtures, testCases } from "@/db/schema";
 import type {
   FunctionalRequirementDefinition,
@@ -205,14 +206,53 @@ export interface SeedResult {
   suites: number;
   fixtures: number;
   cases: number;
+  // Catalog entries removed because they're no longer defined in code (FKs
+  // cascade, so their child rows + stored results go too).
+  prunedFixtures: number;
+  prunedCases: number;
   perRequirement: SeedSummary[];
 }
 
+/** Every id the current code catalog defines, per level. */
+function codeCatalogIds() {
+  return {
+    frIds: bundles.map((b) => b.fr.id),
+    suiteIds: bundles.flatMap((b) => b.suites.map((s) => s.suiteId)),
+    fixtureIds: bundles.flatMap((b) => b.fixtures.map((f) => f.fixtureId)),
+    caseIds: bundles.flatMap((b) => b.cases.map((c) => c.caseId)),
+  };
+}
+
 /**
- * Upsert the entire test catalog from the `@/data` definitions. Idempotent —
- * existing rows are updated and new ones inserted (removed definitions are left
- * in place). Safe to call repeatedly; backs both `pnpm db:seed` and the
- * "Update tests" button on the Run page.
+ * Catalog rows present in the DB but no longer defined in code — a dry run of
+ * what {@link seedDatabase} would prune. Useful before re-seeding.
+ */
+export async function findOrphans() {
+  const { fixtureIds, caseIds } = codeCatalogIds();
+  const orphanFixtures = fixtureIds.length
+    ? await db
+        .select({ id: testFixtures.fixtureId, title: testFixtures.title })
+        .from(testFixtures)
+        .where(notInArray(testFixtures.fixtureId, fixtureIds))
+    : [];
+  const orphanCases = caseIds.length
+    ? await db
+        .select({ id: testCases.caseId, fixtureId: testCases.fixtureId })
+        .from(testCases)
+        .where(notInArray(testCases.caseId, caseIds))
+    : [];
+  return { orphanFixtures, orphanCases };
+}
+
+/**
+ * Reconcile the test catalog with the `@/data` definitions: existing rows are
+ * updated, new ones inserted, and entries no longer defined in code are PRUNED
+ * (their cases + stored results cascade away). The code is the source of truth,
+ * so removing a test from code and re-seeding cleans up its stale rows. Backs
+ * both `pnpm db:seed` and the "Update tests" button on the Run page.
+ *
+ * Note: tests created ad-hoc via the UI forms (not present in code) are also
+ * pruned — the catalog is code-driven.
  */
 export async function seedDatabase(): Promise<SeedResult> {
   const perRequirement: SeedSummary[] = [];
@@ -256,11 +296,44 @@ export async function seedDatabase(): Promise<SeedResult> {
     });
   }
 
+  // Prune anything no longer in code (cases under kept fixtures, then whole
+  // removed fixtures/suites/requirements). FK cascades clean up descendants and
+  // stored results. Guarded so an unexpectedly-empty catalog can't wipe the DB.
+  const { frIds, suiteIds, fixtureIds, caseIds } = codeCatalogIds();
+  let prunedCases = 0;
+  let prunedFixtures = 0;
+  if (caseIds.length) {
+    prunedCases = (
+      await db
+        .delete(testCases)
+        .where(notInArray(testCases.caseId, caseIds))
+        .returning({ id: testCases.caseId })
+    ).length;
+  }
+  if (fixtureIds.length) {
+    prunedFixtures = (
+      await db
+        .delete(testFixtures)
+        .where(notInArray(testFixtures.fixtureId, fixtureIds))
+        .returning({ id: testFixtures.fixtureId })
+    ).length;
+  }
+  if (suiteIds.length) {
+    await db.delete(testSuites).where(notInArray(testSuites.suiteId, suiteIds));
+  }
+  if (frIds.length) {
+    await db
+      .delete(functionalRequirements)
+      .where(notInArray(functionalRequirements.id, frIds));
+  }
+
   return {
     requirements: perRequirement.length,
     suites: perRequirement.reduce((total, item) => total + item.suites, 0),
     fixtures: perRequirement.reduce((total, item) => total + item.fixtures, 0),
     cases: perRequirement.reduce((total, item) => total + item.cases, 0),
+    prunedFixtures,
+    prunedCases,
     perRequirement,
   };
 }

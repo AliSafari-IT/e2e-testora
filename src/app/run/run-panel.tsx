@@ -284,7 +284,11 @@ export function RunPanel() {
       if (!selectedFixtureId && f[0]) setSelectedFixtureId(f[0].fixtureId);
       setSeedMessage({
         type: "success",
-        text: `Tests updated — ${data.requirements} requirements, ${data.suites} suites, ${data.fixtures} fixtures, ${data.cases} cases.`,
+        text: `Tests updated — ${data.requirements} requirements, ${data.suites} suites, ${data.fixtures} fixtures, ${data.cases} cases${
+          data.prunedFixtures || data.prunedCases
+            ? ` · pruned ${data.prunedFixtures} stale fixture(s), ${data.prunedCases} case(s)`
+            : ""
+        }.`,
       });
     } catch (err) {
       setSeedMessage({

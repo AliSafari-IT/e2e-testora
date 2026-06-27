@@ -121,6 +121,7 @@ for (let i = 0; i < 30; i++) {
   await t.wait(1000);
 }
 await t.expect(landed).ok('could not open /en/profile — ended at ' + pathname);
+await dismissPrivacyBanner();
 await t.expect(Selector('body').withText(ADMIN_EMAIL).with({ timeout: 30000 }).exists).ok('profile header should show the account email');
 await t.expect(Selector('button[aria-label="Upload avatar"], [data-testid="profile-header-avatar"]').exists).ok('expected the profile header avatar control');
 await t.expect(profileTab('Overview').exists).ok('expected the Overview tab');
@@ -139,6 +140,7 @@ await t.expect(Selector('body').withText('Account Overview').exists).ok('the Ove
     script: browserScript(`
 const profileTab = (label) => Selector('button, a, [role="tab"]').withText(label).filterVisible();
 await t.navigateTo('/en/profile');
+await dismissPrivacyBanner();
 await t.wait(1200);
 await t.click(profileTab('Profile'));
 await t.expect(Selector('body').withText('Profile Details').with({ timeout: 10000 }).exists).ok('Profile tab should show "Profile Details"');
@@ -159,6 +161,7 @@ await t.expect(Selector('body').withText('Account Overview').with({ timeout: 100
     script: browserScript(`
 const profileTab = (label) => Selector('button, a, [role="tab"]').withText(label).filterVisible();
 await t.navigateTo('/en/profile?tab=security');
+await dismissPrivacyBanner();
 await t.wait(1500);
 await t.expect(profileTab('Security').exists).ok('?tab=security should show the Security tab');
 await t.expect(Selector('body').withText('Change Password').with({ timeout: 15000 }).exists).ok('the Security tab content should render');
@@ -287,6 +290,7 @@ export const navbarDropdownCases: TestCaseDefinition[] = [
     expected: {},
     script: browserScript(`
 await t.navigateTo('/en/dashboard');
+await dismissPrivacyBanner();
 await t.wait(1500);
 const trigger = Selector('button[aria-label="User menu"]');
 await t.expect(trigger.with({ timeout: 30000 }).exists).ok('expected the user-menu trigger in the navbar');
@@ -307,6 +311,7 @@ await t.expect(Selector('[data-testid="user-dropdown-member-since"]').exists).ok
     expected: {},
     script: browserScript(`
 await t.navigateTo('/en/dashboard');
+await dismissPrivacyBanner();
 await t.wait(1500);
 await t.click(Selector('button[aria-label="User menu"]'));
 await t.expect(Selector('a[href="/en/admin"]').with({ timeout: 10000 }).exists).ok('an admin/superadmin account should see the Admin Area link');
@@ -320,6 +325,7 @@ await t.expect(Selector('a[href="/en/admin"]').with({ timeout: 10000 }).exists).
     expected: {},
     script: browserScript(`
 await t.navigateTo('/en/dashboard');
+await dismissPrivacyBanner();
 await t.wait(1500);
 await t.click(Selector('button[aria-label="User menu"]'));
 const profileLink = Selector('a[href="/en/profile"]');
