@@ -36,12 +36,12 @@ const emptyDraft: Draft = {
 
 /**
  * Manage the app registry: add apps (public or private with a key), edit them,
- * lock/unlock private apps, and delete user-created ones. Privacy is enforced
- * server-side — this UI only mirrors that state.
+ * lock/unlock private apps, delete user-created ones, and select the active app.
+ * Privacy is enforced server-side — this UI only mirrors that state.
  */
 export function AppsManager() {
   const router = useRouter();
-  const { projects, refreshProjects, projectId } = useRun();
+  const { projects, refreshProjects, projectId, setProjectId } = useRun();
 
   const [mode, setMode] = useState<null | "add" | { editId: string }>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -57,6 +57,11 @@ export function AppsManager() {
   async function reload() {
     await refreshProjects();
     router.refresh();
+  }
+
+  function selectProject(id: string) {
+    setProjectId(id);
+    router.push("/run");
   }
 
   function startAdd() {
@@ -338,13 +343,22 @@ export function AppsManager() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1">
-                    {p.locked ? (
+                    {isActive ? (
+                      <Button size="sm" variant="default" onClick={() => router.push("/run")}>
+                        <Check className="h-3.5 w-3.5" />
+                        Go to Run
+                      </Button>
+                    ) : p.locked ? (
                       <Button size="sm" variant="outline" onClick={() => { setUnlockFor(p.id); setUnlockKey(""); setUnlockError(null); }}>
                         <Unlock className="h-3.5 w-3.5" />
                         Unlock
                       </Button>
                     ) : (
                       <>
+                        <Button size="sm" variant="outline" onClick={() => selectProject(p.id)}>
+                          <Check className="h-3.5 w-3.5" />
+                          Select
+                        </Button>
                         {p.visibility === "private" && (
                           <Button size="sm" variant="outline" onClick={() => void lock(p.id)} title="Lock again on this browser">
                             <LockOpen className="h-3.5 w-3.5" />

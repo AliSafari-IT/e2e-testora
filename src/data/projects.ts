@@ -77,7 +77,7 @@ const ASAFARIM_PORTAL: ProjectDef = {
   name: "ASafariM · Portal",
   baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_PORTAL_URL || "https://portal.asafarim.com",
   apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_PORTAL_URL || "https://portal.asafarim.com",
-  brand: { productName: "ASafariM", companyName: "ASafariM" },
+  brand: { productName: "ASafariM", companyName: "ASafariM Digital" },
 };
 
 const ASAFARIM_EDUMATCH: ProjectDef = {
@@ -85,13 +85,22 @@ const ASAFARIM_EDUMATCH: ProjectDef = {
   name: "ASafariM · EduMatch",
   baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_EDUMATCH_URL || "https://edumatch.asafarim.com",
   apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_EDUMATCH_URL || "https://edumatch.asafarim.com",
-  brand: { productName: "EduMatch", companyName: "ASafariM" },
+  brand: { productName: "EduMatch", companyName: "ASafariM Digital" },
+};
+
+const ASAFARIM_VIONTO: ProjectDef = {
+  id: "asafarim-vionto",
+  name: "ASafariM · Vionto",
+  baseUrl: process.env.NEXT_PUBLIC_ASAFARIM_VIONTO_URL || "https://vionto.asafarim.com",
+  apiUrl: process.env.NEXT_PUBLIC_ASAFARIM_VIONTO_URL || "https://vionto.asafarim.com",
+  brand: { productName: "Vionto", companyName: "ASafariM Digital" },
 };
 
 export const PROJECTS: ProjectDef[] = [
   IMMOSTORY_PROJECT,
   ASAFARIM_PORTAL,
   ASAFARIM_EDUMATCH,
+  ASAFARIM_VIONTO,
 ];
 
 /** The app new catalog entries (and untagged seed bundles) belong to by default. */

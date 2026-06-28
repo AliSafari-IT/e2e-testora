@@ -107,6 +107,12 @@ import {
   edumatchFixtures,
   edumatchCases,
 } from "@/data/asafarim/edumatch";
+import {
+  viontoFR,
+  viontoSuites,
+  viontoFixtures,
+  viontoCases,
+} from "@/data/asafarim/vionto";
 
 interface SeedBundle {
   fr: FunctionalRequirementDefinition;
@@ -211,6 +217,13 @@ const bundles: SeedBundle[] = [
     fixtures: edumatchFixtures,
     cases: edumatchCases,
     projectId: "asafarim-edumatch",
+  },
+  {
+    fr: viontoFR,
+    suites: viontoSuites,
+    fixtures: viontoFixtures,
+    cases: viontoCases,
+    projectId: "asafarim-vionto",
   },
 ];
 
