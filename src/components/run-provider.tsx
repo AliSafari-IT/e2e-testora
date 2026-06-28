@@ -23,6 +23,10 @@ export interface ClientProject {
   apiUrl?: string;
   productName?: string | null;
   companyName?: string | null;
+  // Configured GitHub repo ("owner/name") and whether a token is stored. The
+  // token itself never reaches the client.
+  githubRepo?: string | null;
+  githubConfigured?: boolean;
 }
 
 // Kept in sync with ACTIVE_PROJECT_COOKIE in @/lib/active-project (that module
