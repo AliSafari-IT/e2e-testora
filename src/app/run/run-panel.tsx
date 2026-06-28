@@ -138,11 +138,18 @@ function EnvBadge({ env, targets }: { env: RunEnvironment | null; targets: Targe
   );
 }
 
+// TestCafe's per-test result markers differ by platform: Windows prints √ / ×,
+// Linux/macOS print ✓ / ✖ (or ✔ / ✗). Match the whole family so the progress
+// bar and log colouring work the same in dev (Windows) and prod (Linux).
+const PASS_MARK = /^\s*[√✓✔]/;
+const FAIL_MARK = /^\s*[×✗✖]/;
+const DONE_MARK = /^\s*[√✓✔×✗✖]/;
+
 // Colour a TestCafe console line by severity so failures stand out.
 function logLineClassName(line: string): string {
   const l = line.trim();
   if (
-    l.startsWith("×") || // failed test marker
+    FAIL_MARK.test(l) || // failed test marker
     /^\d+\)/.test(l) || // error detail, e.g. "1) AssertionError: ..."
     /assertionerror|error[:\s]|exception|unhandled/i.test(l) ||
     /\b\d+\/\d+\s+failed\b/.test(l) || // "1/2 failed"
@@ -153,7 +160,7 @@ function logLineClassName(line: string): string {
   if (/^warning/i.test(l) || /warnings?\s*\(/i.test(l)) {
     return "text-yellow-300";
   }
-  if (l.startsWith("√") || /\bpassed\b/i.test(l)) {
+  if (PASS_MARK.test(l) || /\bpassed\b/i.test(l)) {
     return "text-emerald-300";
   }
   return "text-green-300/90";
@@ -163,7 +170,7 @@ function logLineClassName(line: string): string {
 function lastTestTitle(logs: string[]): string | null {
   for (let i = logs.length - 1; i >= 0; i--) {
     const trimmed = logs[i]!.trim();
-    if (trimmed.startsWith("√") || trimmed.startsWith("×")) {
+    if (DONE_MARK.test(trimmed)) {
       return trimmed.slice(1).trim();
     }
   }
@@ -491,9 +498,10 @@ export function RunPanel() {
   const progressTotal = runMeta?.totalRuns ?? totalCases;
 
   const completedCases = useMemo(() => {
-    // TestCafe marks completed tests with a leading √ or ×. A retried fixture can
-    // re-print lines, so never report more than the planned total.
-    const counted = logs.filter((line) => /^\s*[√×]/.test(line)).length;
+    // TestCafe marks completed tests with a leading pass/fail glyph (√/✓ or ×/✖,
+    // platform-dependent). A retried fixture can re-print lines, so never report
+    // more than the planned total.
+    const counted = logs.filter((line) => DONE_MARK.test(line)).length;
     return progressTotal > 0 ? Math.min(counted, progressTotal) : counted;
   }, [logs, progressTotal]);
 
