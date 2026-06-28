@@ -96,6 +96,12 @@ import {
   asafarimPortalCases,
 } from "@/data/asafarim/portal-auth";
 import {
+  portalAdminFR,
+  portalAdminSuites,
+  portalAdminFixtures,
+  portalAdminCases,
+} from "@/data/asafarim/portal-admin";
+import {
   edumatchFR,
   edumatchSuites,
   edumatchFixtures,
@@ -190,6 +196,13 @@ const bundles: SeedBundle[] = [
     suites: asafarimPortalSuites,
     fixtures: asafarimPortalFixtures,
     cases: asafarimPortalCases,
+    projectId: "asafarim-portal",
+  },
+  {
+    fr: portalAdminFR,
+    suites: portalAdminSuites,
+    fixtures: portalAdminFixtures,
+    cases: portalAdminCases,
     projectId: "asafarim-portal",
   },
   {
