@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useRun, type ClientProject } from "@/components/run-provider";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PROJECT_ID } from "@/data/projects";
 
 type Visibility = "public" | "private";
 
@@ -134,6 +135,9 @@ export function AppsManager() {
         const data = await res.json().catch(() => null);
         setError(extractError(data) ?? "Could not delete app");
         return;
+      }
+      if (p.id === projectId) {
+        setProjectId(DEFAULT_PROJECT_ID);
       }
       await reload();
     } catch {
@@ -354,32 +358,32 @@ export function AppsManager() {
                         Unlock
                       </Button>
                     ) : (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => selectProject(p.id)}>
-                          <Check className="h-3.5 w-3.5" />
-                          Select
-                        </Button>
-                        {p.visibility === "private" && (
-                          <Button size="sm" variant="outline" onClick={() => void lock(p.id)} title="Lock again on this browser">
-                            <LockOpen className="h-3.5 w-3.5" />
-                            Lock
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                          Edit
-                        </Button>
-                        {!p.seeded && (
-                          <button
-                            type="button"
-                            onClick={() => void remove(p)}
-                            title="Delete this app and its data"
-                            className="rounded p-2 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </>
+                      <Button size="sm" variant="outline" onClick={() => selectProject(p.id)}>
+                        <Check className="h-3.5 w-3.5" />
+                        Select
+                      </Button>
+                    )}
+                    {!isActive && !p.locked && p.visibility === "private" && (
+                      <Button size="sm" variant="outline" onClick={() => void lock(p.id)} title="Lock again on this browser">
+                        <LockOpen className="h-3.5 w-3.5" />
+                        Lock
+                      </Button>
+                    )}
+                    {!p.locked && (
+                      <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </Button>
+                    )}
+                    {!p.seeded && !p.locked && (
+                      <button
+                        type="button"
+                        onClick={() => void remove(p)}
+                        title="Delete this app and all its data"
+                        className="rounded p-2 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     )}
                   </div>
                 </div>
