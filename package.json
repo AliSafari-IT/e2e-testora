@@ -21,13 +21,7 @@
     "service:restart": "sudo systemctl daemon-reload && sudo systemctl restart e2e-testora",
     "service:status": "sudo systemctl status e2e-testora --no-pager"
   },
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.2.2",
-      "onFail": "download"
-    }
-  },
+  "packageManager": "pnpm@11.2.2",
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-label": "^2.1.1",
