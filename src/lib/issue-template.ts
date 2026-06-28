@@ -5,13 +5,31 @@ export interface IssueDraft {
   body: string;
 }
 
+// The subset of a result row needed to describe a failure — shared by the
+// deterministic template and the AI generator. A full ReportResultRow satisfies
+// it, so callers can pass the row straight through.
+export type IssueFacts = Pick<
+  ReportResultRow,
+  | "caseTitle"
+  | "fixtureTitle"
+  | "suiteTitle"
+  | "frTitle"
+  | "status"
+  | "targetBaseUrl"
+  | "durationMs"
+  | "createdAt"
+  | "errorMessage"
+  | "screenshot"
+>;
+
 /**
  * Build a default issue (title + markdown body) from a failed/errored result
  * row. Everything here comes off the row the Results table already has, so no
  * extra fetch is needed. The body is plain GitHub-flavoured markdown so it reads
- * well both on the issue page and once pushed to GitHub.
+ * well both on the issue page and once pushed to GitHub. Used both as the instant
+ * seed in the UI and as the fallback when AI generation is off or fails.
  */
-export function buildIssueDraft(row: ReportResultRow): IssueDraft {
+export function buildIssueDraft(row: IssueFacts): IssueDraft {
   const title = `[e2e] ${row.caseTitle} failed`;
   const when = new Date(row.createdAt).toLocaleString();
   const lines: string[] = [

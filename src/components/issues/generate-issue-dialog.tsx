@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Github, Loader2, Save, ExternalLink, Eye, Pencil } from "lucide-react";
+import { Github, Loader2, Save, ExternalLink, Eye, Pencil, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,11 +36,61 @@ export function GenerateIssueDialog({
   const [body, setBody] = useState(initial.body);
   const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [busy, setBusy] = useState<null | "draft" | "github">(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiUsed, setAiUsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: string; githubUrl: string | null } | null>(null);
 
   const previewHtml = useMemo(() => markdownToHtml(body), [body]);
   const issuesHref = `/apps/${row.projectId}/issues`;
+
+  // Tracks the last text we set programmatically, so an AI result only replaces
+  // the editor when the user hasn't started editing it themselves.
+  const lastAuto = useRef<{ title: string; body: string }>({ title: initial.title, body: initial.body });
+
+  async function generate(force: boolean) {
+    setAiBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/issues/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: row.projectId,
+          caseTitle: row.caseTitle,
+          fixtureTitle: row.fixtureTitle,
+          suiteTitle: row.suiteTitle,
+          frTitle: row.frTitle,
+          status: row.status,
+          errorMessage: row.errorMessage,
+          targetBaseUrl: row.targetBaseUrl,
+          durationMs: row.durationMs,
+          createdAt: row.createdAt,
+          hasScreenshot: Boolean(row.screenshot),
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { title: string; body: string; ai: boolean };
+      // Don't clobber edits the user already made (unless they asked to regenerate).
+      const untouched = title === lastAuto.current.title && body === lastAuto.current.body;
+      if (force || untouched) {
+        setTitle(data.title);
+        setBody(data.body);
+        lastAuto.current = { title: data.title, body: data.body };
+      }
+      setAiUsed(data.ai);
+    } catch {
+      /* keep the template seed on any failure */
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  // Try an AI draft once when the dialog opens; falls back silently to the template.
+  useEffect(() => {
+    void generate(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function createIssue(): Promise<string | null> {
     const res = await fetch("/api/issues", {
@@ -143,20 +193,42 @@ export function GenerateIssueDialog({
                 />
               </label>
 
-              <div className="flex gap-1 rounded-md border border-border bg-muted/40 p-1 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex gap-1 rounded-md border border-border bg-muted/40 p-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setTab("edit")}
+                    className={`flex items-center gap-1 rounded px-3 py-1 ${tab === "edit" ? "bg-background font-medium" : "text-muted-foreground"}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("preview")}
+                    className={`flex items-center gap-1 rounded px-3 py-1 ${tab === "preview" ? "bg-background font-medium" : "text-muted-foreground"}`}
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Preview
+                  </button>
+                </div>
+
+                {aiBusy ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-violet-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Drafting with AI…
+                  </span>
+                ) : aiUsed ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-violet-400">
+                    <Sparkles className="h-3.5 w-3.5" /> AI-drafted
+                  </span>
+                ) : null}
+
                 <button
                   type="button"
-                  onClick={() => setTab("edit")}
-                  className={`flex items-center gap-1 rounded px-3 py-1 ${tab === "edit" ? "bg-background font-medium" : "text-muted-foreground"}`}
+                  onClick={() => void generate(true)}
+                  disabled={aiBusy || busy !== null}
+                  title="Re-draft the issue with AI (replaces the current text)"
+                  className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("preview")}
-                  className={`flex items-center gap-1 rounded px-3 py-1 ${tab === "preview" ? "bg-background font-medium" : "text-muted-foreground"}`}
-                >
-                  <Eye className="h-3.5 w-3.5" /> Preview
+                  <Sparkles className="h-3.5 w-3.5" /> Regenerate
                 </button>
               </div>
 
