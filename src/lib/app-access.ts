@@ -96,6 +96,9 @@ export interface ProjectRow {
   keyHash: string | null;
   productName: string | null;
   companyName: string | null;
+  githubRepo: string | null;
+  // Encrypted PAT — server-only, never surfaced to a viewer.
+  githubTokenEnc: string | null;
   seeded: boolean;
 }
 
@@ -112,6 +115,10 @@ export interface ViewerProject {
   apiUrl?: string;
   productName?: string | null;
   companyName?: string | null;
+  // The configured GitHub repo ("owner/name") and whether a token is stored.
+  // The token itself is never exposed — only this boolean.
+  githubRepo?: string | null;
+  githubConfigured?: boolean;
 }
 
 function toViewer(row: ProjectRow, unlockedIds: string[]): ViewerProject {
@@ -130,6 +137,8 @@ function toViewer(row: ProjectRow, unlockedIds: string[]): ViewerProject {
     apiUrl: row.apiUrl,
     productName: row.productName,
     companyName: row.companyName,
+    githubRepo: row.githubRepo,
+    githubConfigured: Boolean(row.githubTokenEnc),
   };
 }
 

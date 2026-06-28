@@ -12,6 +12,7 @@ import {
   FileBarChart,
   BookOpen,
   AppWindow,
+  Bug,
   Loader2,
   Menu,
   X,
@@ -35,8 +36,20 @@ const navItems = [
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const { running } = useRun();
+  const { running, projectId } = useRun();
   const [open, setOpen] = useState(false);
+
+  // Issues are scoped to the active app, so this link is dynamic. `match` lets it
+  // stay highlighted across /apps/<id>/issues and the per-issue detail pages.
+  const items = [
+    ...navItems,
+    {
+      href: `/apps/${projectId}/issues`,
+      match: `/apps/${projectId}/issues`,
+      label: "Issues",
+      icon: Bug,
+    },
+  ];
 
   // Close the mobile drawer whenever the route changes (i.e. after a nav click).
   useEffect(() => {
@@ -100,9 +113,10 @@ export function SidebarNav() {
           </button>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
-          {navItems.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const match = "match" in item ? item.match : undefined;
+            const active = match ? pathname.startsWith(match) : pathname === item.href;
             const showRunning = running && item.href === "/run";
             return (
               <Link

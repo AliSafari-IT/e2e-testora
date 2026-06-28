@@ -26,12 +26,14 @@ import {
   FileCode2,
   FileJson,
   Filter,
+  Github,
   Loader2,
   RotateCcw,
   Trash2,
   X,
   AlertTriangle,
 } from "lucide-react";
+import { GenerateIssueDialog } from "@/components/issues/generate-issue-dialog";
 import type { ReportResultRow } from "@/lib/queries";
 import {
   buildHtmlReport,
@@ -157,6 +159,8 @@ export function ResultsExplorer({
   const [copied, setCopied] = useState(false);
   // Failure-screenshot lightbox: the data URL currently being magnified.
   const [zoomShot, setZoomShot] = useState<string | null>(null);
+  // The failed result currently being turned into an issue (opens the dialog).
+  const [issueRow, setIssueRow] = useState<ReportResultRow | null>(null);
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -890,6 +894,19 @@ export function ResultsExplorer({
               View error
             </button>
           )}
+          {!menuIsSelection && isRerunnable(menu.row) && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted"
+              onClick={() => {
+                setIssueRow(menu.row);
+                setMenu(null);
+              }}
+            >
+              <Github className="h-4 w-4" />
+              Generate issue
+            </button>
+          )}
           <button
             type="button"
             className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted"
@@ -1015,6 +1032,11 @@ export function ResultsExplorer({
       {/* Failure-screenshot magnifier (lightbox) */}
       {zoomShot && (
         <ScreenshotLightbox src={zoomShot} onClose={() => setZoomShot(null)} />
+      )}
+
+      {/* Generate-issue preview/edit dialog */}
+      {issueRow && (
+        <GenerateIssueDialog row={issueRow} onClose={() => setIssueRow(null)} />
       )}
 
       {/* Delete confirmation modal */}

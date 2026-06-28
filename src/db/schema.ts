@@ -21,6 +21,8 @@ export const scriptTypeEnum = pgEnum("script_type", ["single", "multi", "scripte
 
 export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "private"]);
 
+export const issueStatusEnum = pgEnum("issue_status", ["draft", "published"]);
+
 // The app registry. Apps used to be code-only (src/data/projects.ts); they now
 // live here so new apps can be added from the UI and marked private. A private
 // app is locked behind a key (keyHash) — its catalog and results are withheld
@@ -37,7 +39,35 @@ export const projects = pgTable("projects", {
   keyHash: text("key_hash"),
   productName: text("product_name"),
   companyName: text("company_name"),
+  // Optional GitHub wiring for filing issues from failed results. `githubRepo`
+  // is "owner/name"; `githubTokenEnc` is an AES-GCM-encrypted PAT — server-only,
+  // never returned to the client (see src/lib/github.ts).
+  githubRepo: text("github_repo"),
+  githubTokenEnc: text("github_token_enc"),
   seeded: boolean("seeded").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Issues generated from failed results. Always stored here (the markdown
+// fallback when an app has no GitHub repo connected); when the app IS wired to a
+// repo, "publishing" also files it on GitHub and records the url/number. Deleting
+// an app cascades its issues away.
+export const issues = pgTable("issues", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  status: issueStatusEnum("status").notNull().default("draft"),
+  // Provenance of the failed result that seeded this issue. Loose refs (no FK):
+  // results get pruned/re-seeded, but the issue should outlive them.
+  resultId: text("result_id"),
+  caseId: text("case_id"),
+  // Set once published to GitHub.
+  githubUrl: text("github_url"),
+  githubNumber: integer("github_number"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -174,5 +204,12 @@ export const testResultsRelations = relations(testResults, ({ one }) => ({
   case: one(testCases, {
     fields: [testResults.caseId],
     references: [testCases.caseId],
+  }),
+}));
+
+export const issuesRelations = relations(issues, ({ one }) => ({
+  project: one(projects, {
+    fields: [issues.projectId],
+    references: [projects.id],
   }),
 }));

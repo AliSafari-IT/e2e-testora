@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Globe, Loader2, Lock, LockOpen, Pencil, Plus, Trash2, Unlock } from "lucide-react";
+import { Check, Github, Globe, Loader2, Lock, LockOpen, Pencil, Plus, Trash2, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useRun, type ClientProject } from "@/components/run-provider";
@@ -18,6 +18,8 @@ interface Draft {
   key: string;
   productName: string;
   companyName: string;
+  githubRepo: string;
+  githubToken: string;
 }
 
 const emptyDraft: Draft = {
@@ -28,6 +30,8 @@ const emptyDraft: Draft = {
   key: "",
   productName: "",
   companyName: "",
+  githubRepo: "",
+  githubToken: "",
 };
 
 /**
@@ -37,7 +41,7 @@ const emptyDraft: Draft = {
  */
 export function AppsManager() {
   const router = useRouter();
-  const { projects, refreshProjects } = useRun();
+  const { projects, refreshProjects, projectId } = useRun();
 
   const [mode, setMode] = useState<null | "add" | { editId: string }>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -72,6 +76,8 @@ export function AppsManager() {
       key: "",
       productName: p.productName ?? "",
       companyName: p.companyName ?? "",
+      githubRepo: p.githubRepo ?? "",
+      githubToken: "",
     });
   }
 
@@ -87,8 +93,11 @@ export function AppsManager() {
       visibility: draft.visibility,
       productName: draft.productName,
       companyName: draft.companyName,
+      githubRepo: draft.githubRepo,
     };
     if (draft.key) payload.key = draft.key;
+    // Only send a token when one was typed (editing keeps the existing token).
+    if (draft.githubToken) payload.githubToken = draft.githubToken;
     try {
       const res = await fetch(editId ? `/api/projects?id=${encodeURIComponent(editId)}` : "/api/projects", {
         method: editId ? "PATCH" : "POST",
@@ -242,6 +251,38 @@ export function AppsManager() {
               />
             )}
 
+            <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                <Github className="h-4 w-4" />
+                GitHub (optional) — file issues from failed results into a repo
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Repository (owner/name)"
+                  value={draft.githubRepo}
+                  onChange={(v) => setDraft({ ...draft, githubRepo: v })}
+                  placeholder="acme/website"
+                  disabled={busy}
+                />
+                <Field
+                  label={
+                    mode === "add"
+                      ? "Personal access token"
+                      : "New token (leave blank to keep current)"
+                  }
+                  type="password"
+                  value={draft.githubToken}
+                  onChange={(v) => setDraft({ ...draft, githubToken: v })}
+                  placeholder="ghp_… (needs repo/issues scope)"
+                  disabled={busy}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                The token is stored encrypted and used only server-side to create issues. Leave both
+                blank to keep issues as local markdown only.
+              </p>
+            </div>
+
             <div className="flex items-center gap-2">
               <Button onClick={() => void save()} disabled={busy || !draft.name.trim()}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -259,85 +300,104 @@ export function AppsManager() {
         {projects.length === 0 && (
           <p className="text-muted-foreground">No apps yet. Add one above.</p>
         )}
-        {projects.map((p) => (
-          <Card key={p.id}>
-            <CardContent className="flex flex-col gap-3 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate font-semibold text-foreground">{p.name}</span>
-                    <VisibilityBadge project={p} />
-                    {p.seeded && (
-                      <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-                        built-in
-                      </span>
+        {projects.map((p) => {
+          const isActive = p.id === projectId;
+          return (
+            <Card key={p.id} className={cn(isActive && "border-primary/60 ring-1 ring-primary/20")}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-semibold text-foreground">{p.name}</span>
+                      <VisibilityBadge project={p} />
+                      {isActive && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                          <Check className="h-3 w-3" /> selected
+                        </span>
+                      )}
+                      {p.seeded && (
+                        <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                          built-in
+                        </span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {p.locked ? "Locked — unlock to view URLs & data" : p.baseUrl || "no site URL"}
+                    </p>
+                    {!p.locked && p.githubRepo && (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                        <Github className="h-3 w-3 shrink-0" />
+                        {p.githubRepo}
+                        {p.githubConfigured ? (
+                          <span className="text-emerald-400">· token set</span>
+                        ) : (
+                          <span className="text-amber-400">· no token</span>
+                        )}
+                      </p>
                     )}
                   </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {p.locked ? "Locked — unlock to view URLs & data" : p.baseUrl || "no site URL"}
-                  </p>
-                </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                  {p.locked ? (
-                    <Button size="sm" variant="outline" onClick={() => { setUnlockFor(p.id); setUnlockKey(""); setUnlockError(null); }}>
-                      <Unlock className="h-3.5 w-3.5" />
-                      Unlock
-                    </Button>
-                  ) : (
-                    <>
-                      {p.visibility === "private" && (
-                        <Button size="sm" variant="outline" onClick={() => void lock(p.id)} title="Lock again on this browser">
-                          <LockOpen className="h-3.5 w-3.5" />
-                          Lock
-                        </Button>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
+                  <div className="flex shrink-0 items-center gap-1">
+                    {p.locked ? (
+                      <Button size="sm" variant="outline" onClick={() => { setUnlockFor(p.id); setUnlockKey(""); setUnlockError(null); }}>
+                        <Unlock className="h-3.5 w-3.5" />
+                        Unlock
                       </Button>
-                      {!p.seeded && (
-                        <button
-                          type="button"
-                          onClick={() => void remove(p)}
-                          title="Delete this app and its data"
-                          className="rounded p-2 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {unlockFor === p.id && p.locked && (
-                <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="password"
-                      autoFocus
-                      value={unlockKey}
-                      onChange={(e) => setUnlockKey(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") void unlock(p.id); }}
-                      placeholder="App key"
-                      disabled={unlockBusy}
-                      className="h-9 w-56 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
-                    />
-                    <Button size="sm" onClick={() => void unlock(p.id)} disabled={unlockBusy || !unlockKey.trim()}>
-                      {unlockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlock className="h-4 w-4" />}
-                      Unlock
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setUnlockFor(null)} disabled={unlockBusy}>
-                      Cancel
-                    </Button>
+                    ) : (
+                      <>
+                        {p.visibility === "private" && (
+                          <Button size="sm" variant="outline" onClick={() => void lock(p.id)} title="Lock again on this browser">
+                            <LockOpen className="h-3.5 w-3.5" />
+                            Lock
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => startEdit(p)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </Button>
+                        {!p.seeded && (
+                          <button
+                            type="button"
+                            onClick={() => void remove(p)}
+                            title="Delete this app and its data"
+                            className="rounded p-2 text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {unlockError && <p className="text-xs text-destructive">{unlockError}</p>}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+
+                {unlockFor === p.id && p.locked && (
+                  <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="password"
+                        autoFocus
+                        value={unlockKey}
+                        onChange={(e) => setUnlockKey(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") void unlock(p.id); }}
+                        placeholder="App key"
+                        disabled={unlockBusy}
+                        className="h-9 w-56 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                      />
+                      <Button size="sm" onClick={() => void unlock(p.id)} disabled={unlockBusy || !unlockKey.trim()}>
+                        {unlockBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Unlock className="h-4 w-4" />}
+                        Unlock
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setUnlockFor(null)} disabled={unlockBusy}>
+                        Cancel
+                      </Button>
+                    </div>
+                    {unlockError && <p className="text-xs text-destructive">{unlockError}</p>}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

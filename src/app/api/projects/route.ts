@@ -13,6 +13,7 @@ import {
   UNLOCK_COOKIE_MAX_AGE,
   type ProjectRow,
 } from "@/lib/app-access";
+import { encryptToken } from "@/lib/github";
 
 const visibility = z.enum(["public", "private"]);
 const optionalUrl = z.string().trim().url("Must be an absolute URL").or(z.literal(""));
@@ -29,7 +30,8 @@ function slugify(input: string): string {
 }
 
 function sanitize(row: ProjectRow) {
-  // Never leak the key hash to the client.
+  // Never leak the key hash or the encrypted GitHub token to the client — only
+  // the repo string and a boolean for whether a token is configured.
   return {
     id: row.id,
     name: row.name,
@@ -38,6 +40,8 @@ function sanitize(row: ProjectRow) {
     visibility: row.visibility,
     productName: row.productName,
     companyName: row.companyName,
+    githubRepo: row.githubRepo,
+    githubConfigured: Boolean(row.githubTokenEnc),
     seeded: row.seeded,
   };
 }
@@ -68,6 +72,8 @@ const createSchema = z
     key: z.string().min(4, "Key must be at least 4 characters").optional(),
     productName: z.string().trim().optional(),
     companyName: z.string().trim().optional(),
+    githubRepo: z.string().trim().optional(),
+    githubToken: z.string().trim().optional(),
   })
   .refine((v) => v.visibility !== "private" || Boolean(v.key), {
     message: "A private app needs a key",
@@ -94,6 +100,8 @@ export async function POST(request: Request) {
         keyHash: isPrivate && data.key ? hashKey(data.key) : null,
         productName: data.productName || null,
         companyName: data.companyName || null,
+        githubRepo: data.githubRepo || null,
+        githubTokenEnc: data.githubToken ? encryptToken(data.githubToken) : null,
         seeded: false,
       })
       .returning();
@@ -119,6 +127,9 @@ const updateSchema = z.object({
   key: z.string().min(4, "Key must be at least 4 characters").optional(),
   productName: z.string().trim().optional(),
   companyName: z.string().trim().optional(),
+  githubRepo: z.string().trim().optional(),
+  // Omit to keep the current token; "" to clear it; any value to replace it.
+  githubToken: z.string().trim().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -154,6 +165,14 @@ export async function PATCH(request: Request) {
     );
   }
 
+  // GitHub token: omitted → keep; "" → clear; any value → (re)encrypt.
+  const githubTokenEnc =
+    data.githubToken === undefined
+      ? row.githubTokenEnc
+      : data.githubToken
+        ? encryptToken(data.githubToken)
+        : null;
+
   const [updated] = await db
     .update(projects)
     .set({
@@ -162,6 +181,8 @@ export async function PATCH(request: Request) {
       ...(data.apiUrl !== undefined ? { apiUrl: data.apiUrl } : {}),
       ...(data.productName !== undefined ? { productName: data.productName || null } : {}),
       ...(data.companyName !== undefined ? { companyName: data.companyName || null } : {}),
+      ...(data.githubRepo !== undefined ? { githubRepo: data.githubRepo || null } : {}),
+      githubTokenEnc,
       visibility: nextVisibility,
       keyHash,
       updatedAt: new Date(),
