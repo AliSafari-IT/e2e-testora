@@ -4,10 +4,16 @@ import { FixtureListView } from "@/components/entities/fixture-list";
 import { CollapsibleFixtureForm } from "@/components/forms/collapsible-fixture-form";
 import { getTestFixtures, getTestSuites, getTestCases, getLastResultByCase } from "@/lib/queries";
 import { getActiveProjectId } from "@/lib/active-project";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 import { aggregateResults, type LastResult } from "@/lib/run-status";
 
 export default async function FixturesPage() {
   const projectId = await getActiveProjectId();
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
   const [fixtures, suites, cases, lastByCase] = await Promise.all([
     getTestFixtures(projectId),
     getTestSuites(projectId),

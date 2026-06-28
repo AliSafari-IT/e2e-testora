@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Boxes, Check, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Boxes, Check, ChevronDown, Lock, Settings } from "lucide-react";
 import { useRun } from "@/components/run-provider";
-import { PROJECTS, getProject } from "@/data/projects";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,10 +13,11 @@ import { cn } from "@/lib/utils";
  * here re-filters the Cases / Requirements / Results / Run pages alike.
  */
 export function AppBadge() {
-  const { projectId, setProjectId } = useRun();
+  const { projectId, setProjectId, projects, activeProject } = useRun();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const active = getProject(projectId);
+  const active = activeProject;
 
   useEffect(() => {
     if (!open) return;
@@ -26,8 +28,13 @@ export function AppBadge() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  // A single app means nothing to switch — still show the badge for orientation.
-  const multi = PROJECTS.length > 1;
+  // The Apps page is the full app manager (switch/add/edit there) and its own
+  // header action sits top-right — so hide the floating badge there to avoid
+  // overlapping it.
+  if (pathname === "/apps") return null;
+
+  // The dropdown is always useful now — even with one app it offers "Manage apps".
+  const multi = true;
 
   return (
     <div ref={ref} className="fixed right-3 top-3 z-40 print:hidden">
@@ -45,6 +52,7 @@ export function AppBadge() {
         <span className="max-w-40 truncate font-semibold text-foreground">
           {active?.name ?? projectId}
         </span>
+        {active?.locked && <Lock className="h-3.5 w-3.5 text-amber-400" />}
         {multi && <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
       </button>
 
@@ -53,7 +61,7 @@ export function AppBadge() {
           <p className="px-2 py-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
             Switch app
           </p>
-          {PROJECTS.map((p) => (
+          {projects.map((p) => (
             <button
               key={p.id}
               type="button"
@@ -67,12 +75,27 @@ export function AppBadge() {
               )}
             >
               <span className="min-w-0">
-                <span className="block truncate font-medium text-foreground">{p.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{p.baseUrl}</span>
+                <span className="flex items-center gap-1.5 truncate font-medium text-foreground">
+                  {p.name}
+                  {p.visibility === "private" && (
+                    <Lock className={cn("h-3 w-3", p.locked ? "text-amber-400" : "text-emerald-400")} />
+                  )}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {p.locked ? "Private — locked" : p.baseUrl || "—"}
+                </span>
               </span>
               {p.id === projectId && <Check className="h-4 w-4 shrink-0 text-primary" />}
             </button>
           ))}
+          <Link
+            href="/apps"
+            onClick={() => setOpen(false)}
+            className="mt-1 flex items-center gap-2 rounded border-t border-border px-2 py-2 text-sm text-primary transition-colors hover:bg-primary/10"
+          >
+            <Settings className="h-4 w-4" />
+            Manage apps
+          </Link>
         </div>
       )}
     </div>

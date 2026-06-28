@@ -3,9 +3,13 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { functionalRequirements } from "@/db/schema";
 import { getRequirementSummaries } from "@/lib/queries";
+import { isProjectViewable } from "@/lib/app-access";
 
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("project") || undefined;
+  if (!(await isProjectViewable(projectId))) {
+    return NextResponse.json({ error: "App is locked" }, { status: 403 });
+  }
   return NextResponse.json(await getRequirementSummaries(projectId));
 }
 

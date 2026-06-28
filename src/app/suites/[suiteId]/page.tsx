@@ -7,15 +7,23 @@ import { FixtureForm } from "@/components/forms/fixture-form";
 import { FixtureCard } from "@/components/entities/fixture-card";
 import { SuiteCard } from "@/components/entities/suite-card";
 import { getTestSuiteById, getFunctionalRequirements, getTestSuites } from "@/lib/queries";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 
 export default async function SuiteDetailPage({ params }: { params: Promise<{ suiteId: string }> }) {
   const { suiteId } = await params;
-  const [suite, requirements, allSuites] = await Promise.all([
-    getTestSuiteById(suiteId),
-    getFunctionalRequirements(),
-    getTestSuites(),
-  ]);
+  const suite = await getTestSuiteById(suiteId);
   if (!suite) notFound();
+  // Withhold a private app's suite until unlocked (direct-URL guard).
+  const projectId = suite.functionalRequirement?.projectId ?? "";
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
+  const [requirements, allSuites] = await Promise.all([
+    getFunctionalRequirements(projectId),
+    getTestSuites(projectId),
+  ]);
 
   const frOptions = requirements.map((fr) => ({ id: fr.id, title: fr.title }));
   const suiteOptions = allSuites.map((s) => ({ suiteId: s.suiteId, title: s.title }));

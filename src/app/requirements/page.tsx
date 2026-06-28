@@ -4,9 +4,16 @@ import { CollapsibleRequirementForm } from "@/components/forms/collapsible-requi
 import { RequirementCard } from "@/components/entities/requirement-card";
 import { getFunctionalRequirements } from "@/lib/queries";
 import { getActiveProjectId } from "@/lib/active-project";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 
 export default async function RequirementsPage() {
-  const requirements = await getFunctionalRequirements(await getActiveProjectId());
+  const projectId = await getActiveProjectId();
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
+  const requirements = await getFunctionalRequirements(projectId);
 
   return (
     <div className="flex flex-col gap-6">

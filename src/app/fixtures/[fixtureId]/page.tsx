@@ -8,15 +8,23 @@ import { CaseForm } from "@/components/forms/case-form";
 import { FixtureCard } from "@/components/entities/fixture-card";
 import { CaseCard } from "@/components/entities/case-card";
 import { getTestFixtureById, getTestSuites, getTestFixtures } from "@/lib/queries";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 
 export default async function FixtureDetailPage({ params }: { params: Promise<{ fixtureId: string }> }) {
   const { fixtureId } = await params;
-  const [fixture, suites, allFixtures] = await Promise.all([
-    getTestFixtureById(fixtureId),
-    getTestSuites(),
-    getTestFixtures(),
-  ]);
+  const fixture = await getTestFixtureById(fixtureId);
   if (!fixture) notFound();
+  // Withhold a private app's fixture until unlocked (direct-URL guard).
+  const projectId = fixture.suite?.functionalRequirement?.projectId ?? "";
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
+  const [suites, allFixtures] = await Promise.all([
+    getTestSuites(projectId),
+    getTestFixtures(projectId),
+  ]);
 
   const suiteOptions = suites.map((suite) => ({ suiteId: suite.suiteId, title: suite.title }));
   const fixtureOptions = allFixtures.map((f) => ({ fixtureId: f.fixtureId, title: f.title }));

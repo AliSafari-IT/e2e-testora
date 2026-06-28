@@ -9,7 +9,21 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { DEFAULT_PROJECT_ID, getProject } from "@/data/projects";
+import { DEFAULT_PROJECT_ID } from "@/data/projects";
+
+// A client-safe view of an app, as returned by /api/projects. URLs + branding are
+// only present when the app is viewable (public, or unlocked by this browser).
+export interface ClientProject {
+  id: string;
+  name: string;
+  visibility: "public" | "private";
+  locked: boolean;
+  seeded: boolean;
+  baseUrl?: string;
+  apiUrl?: string;
+  productName?: string | null;
+  companyName?: string | null;
+}
 
 // Kept in sync with ACTIVE_PROJECT_COOKIE in @/lib/active-project (that module
 // imports next/headers and can't be pulled into this client component). The
@@ -54,6 +68,13 @@ interface RunContextValue {
   // The active app/project; scopes the Run pickers + an "all" run to one app.
   projectId: string;
   setProjectId: (id: string) => void;
+  // The DB-backed app registry (client-safe views) + a refresher for after
+  // adding/editing/unlocking apps.
+  projects: ClientProject[];
+  refreshProjects: () => Promise<void>;
+  // The active app's view, and whether it's locked for this browser.
+  activeProject: ClientProject | null;
+  activeProjectLocked: boolean;
   environment: RunEnvironment;
   setEnvironment: (env: RunEnvironment) => void;
   // The environment the currently displayed run was launched with (may differ
@@ -144,6 +165,9 @@ export function RunProvider({
   const [projectId, setProjectIdState] = useState<string>(
     initialProject ?? DEFAULT_PROJECT_ID,
   );
+  const [projects, setProjects] = useState<ClientProject[]>([]);
+  // Mirror of `projects` for use inside setProjectId without making it a dep.
+  const projectsRef = useRef<ClientProject[]>([]);
   const [environment, setEnvironmentState] = useState<RunEnvironment>({});
   const [runEnvironment, setRunEnvironment] = useState<RunEnvironment | null>(
     null,
@@ -344,8 +368,9 @@ export function RunProvider({
       // Pre-fill the target with the app's own origin, so a run hits the right
       // deployment (apps live on different domains — portal vs edumatch). The
       // user can still override the URLs afterwards for a dev/custom target.
-      const proj = getProject(id);
-      if (proj) {
+      // A locked private app exposes no URLs, so prefill is skipped for it.
+      const proj = projectsRef.current.find((p) => p.id === id);
+      if (proj && !proj.locked && (proj.baseUrl || proj.apiUrl)) {
         const env: RunEnvironment = { baseUrl: proj.baseUrl, apiUrl: proj.apiUrl };
         setEnvironmentState(env);
         try {
@@ -367,6 +392,25 @@ export function RunProvider({
       /* ignore */
     }
   }, []);
+
+  // Load the DB-backed app registry (client-safe views). Re-run after adding,
+  // editing, unlocking or locking an app so lock state + URLs stay current.
+  const refreshProjects = useCallback(async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (!res.ok) return;
+      const list = (await res.json()) as ClientProject[];
+      const arr = Array.isArray(list) ? list : [];
+      setProjects(arr);
+      projectsRef.current = arr;
+    } catch {
+      /* ignore — keep whatever we had */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProjects();
+  }, [refreshProjects]);
 
   const cancelRun = useCallback(async () => {
     if (!runId) return;
@@ -543,6 +587,8 @@ export function RunProvider({
   );
 
   const failedCaseCount = collectFailedCases(reports).length;
+  const activeProject = projects.find((p) => p.id === projectId) ?? null;
+  const activeProjectLocked = activeProject?.locked ?? false;
 
   return (
     <RunContext.Provider
@@ -551,6 +597,10 @@ export function RunProvider({
         setSelectedFixtureId,
         projectId,
         setProjectId,
+        projects,
+        refreshProjects,
+        activeProject,
+        activeProjectLocked,
         environment,
         setEnvironment,
         runEnvironment,

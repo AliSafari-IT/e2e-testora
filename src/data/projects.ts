@@ -8,6 +8,20 @@
 // Add a new app by appending an entry here and tagging its requirements with the
 // matching `projectId` (see how the seed bundles set it).
 
+/**
+ * A named deployment the Run page can point at (Local, Remote, …). These are the
+ * built-in targets seeded into the `target_environments` table per app; users can
+ * add more from the Run page (those live only in the DB, not here).
+ */
+export interface TargetDef {
+  /** Stable slug — combined with the project id to form the seeded row id. */
+  slug: string;
+  /** Label shown in the Target environment dropdown. */
+  name: string;
+  baseUrl: string;
+  apiUrl: string;
+}
+
 export interface ProjectDef {
   /** Stable slug stored on each functional requirement's `projectId`. */
   id: string;
@@ -19,18 +33,39 @@ export interface ProjectDef {
   apiUrl: string;
   /** Optional default branding for exported reports. */
   brand?: { productName?: string; companyName?: string };
+  /**
+   * Built-in target environments seeded for this app. When omitted, a single
+   * "Remote" target is derived from `baseUrl`/`apiUrl` at seed time.
+   */
+  targets?: TargetDef[];
 }
 
-// The catalog that shipped first (admin, scraper, video-gen, contact, …). Kept
-// deliberately un-named in source — the display name comes from env so a real
-// product name never leaks into this repo. Defaults point at localhost / the
-// generic NEXT_PUBLIC_WEBAPP_* values.
-const WEBAPP_PROJECT: ProjectDef = {
-  id: "webapp",
-  name: process.env.NEXT_PUBLIC_WEBAPP_NAME || "Web app (default)",
-  baseUrl: process.env.NEXT_PUBLIC_WEBAPP_BASE_URL || "http://localhost:3233",
-  apiUrl:
-    process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1",
+// The "Local" target is always localhost — the site on :3233, the API on :3234
+// — independent of any deployment env var (NEXT_PUBLIC_WEBAPP_BASE_URL is set to
+// the live domain in production, so it must NOT define Local). The "Remote"
+// target is env-driven so no real product domain is baked into source, falling
+// back to the configured default.
+const LOCAL_BASE = "http://localhost:3233";
+const LOCAL_API = "http://localhost:3234/api/v1";
+const WEBAPP_REMOTE_BASE = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_BASE_URL || "https://immostory.ai";
+const WEBAPP_REMOTE_API =
+  process.env.NEXT_PUBLIC_WEBAPP_REMOTE_API_URL || "https://api.immostory.ai/api/v1";
+
+// The primary app under test — ImmoStory. It owns the original catalog (auth,
+// registration, scraper, video-gen, admin, contact, …). Its canonical URL is the
+// live site; the Local / Remote targets let a run point at localhost or the
+// deployment without changing any test content. The display name is env-override-
+// able. (Was historically the generic "webapp" project; renamed so the catalog
+// belongs to the real app it tests.)
+const IMMOSTORY_PROJECT: ProjectDef = {
+  id: "immostory",
+  name: process.env.NEXT_PUBLIC_WEBAPP_NAME || "ImmoStory",
+  baseUrl: WEBAPP_REMOTE_BASE,
+  apiUrl: WEBAPP_REMOTE_API,
+  targets: [
+    { slug: "local", name: "Local", baseUrl: LOCAL_BASE, apiUrl: LOCAL_API },
+    { slug: "remote", name: "Remote", baseUrl: WEBAPP_REMOTE_BASE, apiUrl: WEBAPP_REMOTE_API },
+  ],
 };
 
 // ASafariM apps — the maintainer's own sites, each on its own subdomain, so
@@ -54,14 +89,24 @@ const ASAFARIM_EDUMATCH: ProjectDef = {
 };
 
 export const PROJECTS: ProjectDef[] = [
-  WEBAPP_PROJECT,
+  IMMOSTORY_PROJECT,
   ASAFARIM_PORTAL,
   ASAFARIM_EDUMATCH,
 ];
 
-/** The catalog every existing requirement is tagged with. */
-export const DEFAULT_PROJECT_ID = WEBAPP_PROJECT.id;
+/** The app new catalog entries (and untagged seed bundles) belong to by default. */
+export const DEFAULT_PROJECT_ID = IMMOSTORY_PROJECT.id;
 
 export function getProject(id: string | null | undefined): ProjectDef | undefined {
   return PROJECTS.find((p) => p.id === id);
+}
+
+/**
+ * The built-in target environments to seed for a project. Uses the project's
+ * explicit `targets` when defined, otherwise derives a single "Remote" from its
+ * default URLs so every app has at least one selectable target.
+ */
+export function projectSeedTargets(project: ProjectDef): TargetDef[] {
+  if (project.targets?.length) return project.targets;
+  return [{ slug: "remote", name: "Remote", baseUrl: project.baseUrl, apiUrl: project.apiUrl }];
 }

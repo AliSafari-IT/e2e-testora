@@ -30,7 +30,10 @@ import type {
 const API_DEFAULT = "http://localhost:3234/api/v1";
 
 const REGISTER_API_SCRIPT = [
-  "const api = run.apiUrl || '" + API_DEFAULT + "';",
+  // The chosen target's API base (set by the Run page) wins; fall back to the
+  // per-run input, then the local default. Without the env override first, a
+  // commonInput apiUrl would pin every run to localhost and ignore the target.
+  "const api = process.env.WEBAPP_API_URL || run.apiUrl || '" + API_DEFAULT + "';",
   "// Fresh, unique e-mail per run keeps the success cases re-runnable.",
   "const unique = Date.now() + '_' + Math.floor(Math.random() * 1e6);",
   "// Plus-address the configured admin email so success cases are re-runnable.",

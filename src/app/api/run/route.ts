@@ -23,6 +23,7 @@ import {
 } from "@/test-engine/executors/runLog";
 import type { FormattedReport } from "@/test-engine/types";
 import { getActiveProjectId } from "@/lib/active-project";
+import { isProjectViewable } from "@/lib/app-access";
 
 // Reads live in-memory run state, so it must never be statically cached.
 export const dynamic = "force-dynamic";
@@ -147,6 +148,13 @@ export async function POST(request: Request) {
       ? body.projectId
       : undefined;
   const projectId = bodyProjectId || (await getActiveProjectId());
+  // A locked private app's tests can't be run without unlocking it first.
+  if (!(await isProjectViewable(projectId))) {
+    return NextResponse.json(
+      { error: "This app is locked. Unlock it with its key to run its tests." },
+      { status: 403 },
+    );
+  }
   const plan =
     "all" in data
       ? await loadAllRunPlan(projectId)

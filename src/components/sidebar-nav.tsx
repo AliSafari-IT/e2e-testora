@@ -11,6 +11,7 @@ import {
   PlayCircle,
   FileBarChart,
   BookOpen,
+  AppWindow,
   Loader2,
   Menu,
   X,
@@ -22,6 +23,7 @@ import { TourTrigger } from "@/components/run/run-tour";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/apps", label: "Apps", icon: AppWindow },
   { href: "/requirements", label: "Requirements", icon: ListChecks },
   { href: "/suites", label: "Suites", icon: Boxes },
   { href: "/fixtures", label: "Fixtures", icon: FlaskConical },

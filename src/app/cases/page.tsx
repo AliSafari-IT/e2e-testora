@@ -4,10 +4,16 @@ import { CaseListView } from "@/components/entities/case-list";
 import { CollapsibleCaseForm } from "@/components/forms/collapsible-case-form";
 import { getTestCases, getTestFixtures, getLastResultByCase } from "@/lib/queries";
 import { getActiveProjectId } from "@/lib/active-project";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 import { singleResult } from "@/lib/run-status";
 
 export default async function CasesPage() {
   const projectId = await getActiveProjectId();
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
   const [cases, fixtures, lastByCase] = await Promise.all([
     getTestCases(projectId),
     getTestFixtures(projectId),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Card,
@@ -42,7 +42,6 @@ import {
 } from "@/lib/report";
 import { saveTextFile } from "@/lib/save-file";
 import { getDomainBrands, hostFromUrl } from "@/lib/domain-logos";
-import { getProject } from "@/data/projects";
 import { useRun } from "@/components/run-provider";
 
 /** A result counts as re-runnable when it didn't pass and carries the ids a run needs. */
@@ -92,11 +91,15 @@ function slug(value: string): string {
 
 /** App name for the export filename: the chosen app filter, else the single app
  *  present in the rows, else "AllApps". */
-function exportAppName(app: string, rows: ReportResultRow[]): string {
-  if (app) return getProject(app)?.name ?? app;
+function exportAppName(
+  app: string,
+  rows: ReportResultRow[],
+  nameOf: (id: string) => string,
+): string {
+  if (app) return nameOf(app);
   const ids = [...new Set(rows.map((r) => r.projectId).filter(Boolean))];
   const only = ids[0];
-  if (ids.length === 1 && only) return getProject(only)?.name ?? only;
+  if (ids.length === 1 && only) return nameOf(only);
   return "AllApps";
 }
 
@@ -166,7 +169,13 @@ export function ResultsExplorer({
   const [deleting, setDeleting] = useState(false);
   const headerCbRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-  const { rerunCases, running } = useRun();
+  const { rerunCases, running, projects } = useRun();
+  // Map an app id to its display name via the DB registry, falling back to the id
+  // for legacy/removed apps not present in the list.
+  const nameOf = useCallback(
+    (id: string) => projects.find((p) => p.id === id)?.name ?? id,
+    [projects],
+  );
 
   const frOptions = useMemo(() => distinct(rows, "frId", "frTitle"), [rows]);
   const suiteScope = useMemo(
@@ -202,9 +211,9 @@ export function ResultsExplorer({
   const appOptions = useMemo(() => {
     const ids = [...new Set(rows.map((r) => r.projectId).filter(Boolean))];
     return ids
-      .map((id) => ({ id, label: getProject(id)?.name ?? id }))
+      .map((id) => ({ id, label: nameOf(id) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [rows]);
+  }, [rows, nameOf]);
   // Target options: the distinct deployment origins runs executed against.
   const targetOptions = useMemo(() => {
     const urls = [
@@ -334,7 +343,7 @@ export function ResultsExplorer({
           ? buildJsonReport(rowsToExport, meta)
           : buildHtmlReport(rowsToExport, meta, brandsForRows(rowsToExport));
       // TestReport_<AppName>_<TargetEnv>_<datetime>.<ext>
-      const suggestedName = `TestReport_${slug(exportAppName(app, rowsToExport))}_${slug(
+      const suggestedName = `TestReport_${slug(exportAppName(app, rowsToExport, nameOf))}_${slug(
         exportTargetEnv(target, rowsToExport),
       )}_${dateStamp()}.${kind}`;
       const outcome = await saveTextFile(content, {

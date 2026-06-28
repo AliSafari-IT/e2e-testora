@@ -4,9 +4,13 @@ import { getTestFixtures } from "@/lib/queries";
 import { db } from "@/db/client";
 import { testFixtures } from "@/db/schema";
 import { isValidFixtureBaseUrl } from "@/test-engine/resolveFixtureBaseUrl";
+import { isProjectViewable } from "@/lib/app-access";
 
 export async function GET(request: Request) {
   const projectId = new URL(request.url).searchParams.get("project") || undefined;
+  if (!(await isProjectViewable(projectId))) {
+    return NextResponse.json({ error: "App is locked" }, { status: 403 });
+  }
   const fixtures = await getTestFixtures(projectId);
   return NextResponse.json(
     fixtures.map((fixture) => ({

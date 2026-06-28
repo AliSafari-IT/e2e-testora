@@ -1,6 +1,13 @@
 import { db } from "@/db/client";
-import { notInArray } from "drizzle-orm";
-import { functionalRequirements, testSuites, testFixtures, testCases } from "@/db/schema";
+import { and, eq, notInArray } from "drizzle-orm";
+import {
+  functionalRequirements,
+  testSuites,
+  testFixtures,
+  testCases,
+  targetEnvironments,
+  projects,
+} from "@/db/schema";
 import type {
   FunctionalRequirementDefinition,
   TestSuiteDefinition,
@@ -81,7 +88,7 @@ import {
   contactSupportFixtures,
   contactSupportCases,
 } from "@/data/contact-flow";
-import { DEFAULT_PROJECT_ID } from "@/data/projects";
+import { DEFAULT_PROJECT_ID, PROJECTS, projectSeedTargets } from "@/data/projects";
 import {
   asafarimPortalAuthFR,
   asafarimPortalSuites,
@@ -245,6 +252,56 @@ export async function findOrphans() {
 }
 
 /**
+ * Reconcile the built-in target environments for every app with their code
+ * definitions (see projectSeedTargets). Seeded rows are upserted in their defined
+ * order; seeded rows no longer in code are pruned. User-added targets
+ * (seeded = false) are never touched. Updating a built-in's URL preserves any
+ * other fields and just refreshes name/URLs/order.
+ */
+async function seedTargetEnvironments(): Promise<void> {
+  const seededIds: string[] = [];
+  for (const project of PROJECTS) {
+    const targets = projectSeedTargets(project);
+    for (let index = 0; index < targets.length; index++) {
+      const target = targets[index]!;
+      const id = `${project.id}:${target.slug}`;
+      seededIds.push(id);
+      const row = {
+        id,
+        projectId: project.id,
+        name: target.name,
+        baseUrl: target.baseUrl,
+        apiUrl: target.apiUrl,
+        seeded: true,
+        sortOrder: index,
+        updatedAt: new Date(),
+      };
+      await db
+        .insert(targetEnvironments)
+        .values(row)
+        .onConflictDoUpdate({
+          target: targetEnvironments.id,
+          set: {
+            projectId: row.projectId,
+            name: row.name,
+            baseUrl: row.baseUrl,
+            apiUrl: row.apiUrl,
+            seeded: true,
+            sortOrder: row.sortOrder,
+            updatedAt: row.updatedAt,
+          },
+        });
+    }
+  }
+  // Drop only built-in targets that code no longer defines; keep user-added ones.
+  if (seededIds.length) {
+    await db
+      .delete(targetEnvironments)
+      .where(and(eq(targetEnvironments.seeded, true), notInArray(targetEnvironments.id, seededIds)));
+  }
+}
+
+/**
  * Reconcile the test catalog with the `@/data` definitions: existing rows are
  * updated, new ones inserted, and entries no longer defined in code are PRUNED
  * (their cases + stored results cascade away). The code is the source of truth,
@@ -254,8 +311,49 @@ export async function findOrphans() {
  * Note: tests created ad-hoc via the UI forms (not present in code) are also
  * pruned — the catalog is code-driven.
  */
+/**
+ * Mirror the code-defined apps into the `projects` table. Names/URLs/branding are
+ * reconciled from code, but a project's `visibility` and `keyHash` are PRESERVED
+ * on conflict — so marking a seeded app private in the UI survives a re-seed.
+ * Projects are never pruned here (an app removed from code keeps its DB row, its
+ * catalog and results), since deleting one would cascade away real data.
+ */
+async function seedProjects(): Promise<void> {
+  for (const project of PROJECTS) {
+    await db
+      .insert(projects)
+      .values({
+        id: project.id,
+        name: project.name,
+        baseUrl: project.baseUrl ?? "",
+        apiUrl: project.apiUrl ?? "",
+        productName: project.brand?.productName ?? null,
+        companyName: project.brand?.companyName ?? null,
+        seeded: true,
+        // New seeded rows default to public; private must be opted into in the UI.
+        visibility: "public",
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: projects.id,
+        set: {
+          name: project.name,
+          baseUrl: project.baseUrl ?? "",
+          apiUrl: project.apiUrl ?? "",
+          productName: project.brand?.productName ?? null,
+          companyName: project.brand?.companyName ?? null,
+          seeded: true,
+          updatedAt: new Date(),
+          // NB: visibility + keyHash intentionally omitted — preserve user choice.
+        },
+      });
+  }
+}
+
 export async function seedDatabase(): Promise<SeedResult> {
   const perRequirement: SeedSummary[] = [];
+
+  await seedProjects();
 
   for (const bundle of bundles) {
     const frRow = {
@@ -326,6 +424,8 @@ export async function seedDatabase(): Promise<SeedResult> {
       .delete(functionalRequirements)
       .where(notInArray(functionalRequirements.id, frIds));
   }
+
+  await seedTargetEnvironments();
 
   return {
     requirements: perRequirement.length,

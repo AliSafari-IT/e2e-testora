@@ -19,10 +19,13 @@ import {
   Database,
   Globe,
   Loader2,
+  Pencil,
   PlayCircle,
+  Plus,
   RotateCcw,
   StopCircle,
   Terminal,
+  Trash2,
 } from "lucide-react";
 import { ScreenshotLightbox } from "@/components/results/screenshot-lightbox";
 import {
@@ -31,9 +34,9 @@ import {
   type RunEnvironment,
 } from "@/components/run-provider";
 import { DomainBrandControl } from "@/components/run/domain-brand-control";
-import { SavedTargetsControl } from "@/components/run/saved-targets-control";
+import { LockedApp } from "@/components/locked-app";
 import { hostFromUrl, setDomainBrand } from "@/lib/domain-logos";
-import { PROJECTS, getProject } from "@/data/projects";
+import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FixtureSummary {
@@ -64,40 +67,24 @@ const SCOPE_TABS: { scope: RunScope; label: string }[] = [
   { scope: "all", label: "All requirements" },
 ];
 
-// The "base scope" — which deployment a run targets. Picked once; every run
-// (and rerun) follows it without touching any test content. "Default" sends no
-// override, so the URLs baked into the seed data (local dev) are used.
-interface EnvPreset {
+// A target environment — which deployment a run is pointed at. Built-in entries
+// (Local / Remote, seeded per app) and user-added ones both come from the DB via
+// /api/targets; picking one fills the run's base URLs without touching any test
+// content. See src/data/projects.ts (seed definitions) and the targets API route.
+interface TargetEnv {
   id: string;
-  label: string;
+  projectId: string;
+  name: string;
   baseUrl: string;
   apiUrl: string;
+  seeded: boolean;
 }
 
-// Preset URLs come from the environment so no app-specific deployment is baked
-// into the tool. The "Remote" preset only appears when its env vars are set.
-const LOCAL_BASE =
-  process.env.NEXT_PUBLIC_WEBAPP_BASE_URL || "http://localhost:3233";
-const LOCAL_API =
-  process.env.NEXT_PUBLIC_WEBAPP_API_URL || "http://localhost:3234/api/v1";
-const REMOTE_BASE = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_BASE_URL || "";
-const REMOTE_API = process.env.NEXT_PUBLIC_WEBAPP_REMOTE_API_URL || "";
-
-const ENV_PRESETS: EnvPreset[] = [
-  { id: "default", label: "Default (seed)", baseUrl: "", apiUrl: "" },
-  { id: "local", label: "Local", baseUrl: LOCAL_BASE, apiUrl: LOCAL_API },
-  ...(REMOTE_BASE
-    ? [
-        {
-          id: "remote",
-          label: "Remote",
-          baseUrl: REMOTE_BASE,
-          apiUrl: REMOTE_API,
-        },
-      ]
-    : []),
-  { id: "custom", label: "Custom…", baseUrl: "", apiUrl: "" },
-];
+// Sentinel <option> value for the "add a new target" choice in the dropdown.
+const ADD_TARGET = "__add__";
+// Remembers which target was picked across reloads (selection is by id, since
+// several targets can share the same URLs — e.g. a custom clone of Remote).
+const SELECTED_TARGET_KEY = "e2e_selected_target";
 
 function isWebEnv(env: RunEnvironment | null): boolean {
   if (!env?.baseUrl) return false;
@@ -115,16 +102,12 @@ function isWebEnv(env: RunEnvironment | null): boolean {
   }
 }
 
-function environmentLabel(env: RunEnvironment | null): string {
+function environmentLabel(env: RunEnvironment | null, targets: TargetEnv[]): string {
   if (!env || (!env.baseUrl && !env.apiUrl)) return "Default (seed)";
-  const preset = ENV_PRESETS.find(
-    (p) =>
-      p.id !== "default" &&
-      p.id !== "custom" &&
-      p.baseUrl === (env.baseUrl ?? "") &&
-      p.apiUrl === (env.apiUrl ?? ""),
+  const match = targets.find(
+    (t) => t.baseUrl === (env.baseUrl ?? "") && t.apiUrl === (env.apiUrl ?? ""),
   );
-  if (preset) return preset.label;
+  if (match) return match.name;
   try {
     return new URL(env.baseUrl ?? "").host || "Custom";
   } catch {
@@ -133,7 +116,7 @@ function environmentLabel(env: RunEnvironment | null): string {
 }
 
 /** A small pill showing which deployment a run targeted. */
-function EnvBadge({ env }: { env: RunEnvironment | null }) {
+function EnvBadge({ env, targets }: { env: RunEnvironment | null; targets: TargetEnv[] }) {
   const web = isWebEnv(env);
   return (
     <span
@@ -150,7 +133,7 @@ function EnvBadge({ env }: { env: RunEnvironment | null }) {
       )}
     >
       <Globe className="h-3 w-3" />
-      {environmentLabel(env)}
+      {environmentLabel(env, targets)}
     </span>
   );
 }
@@ -211,6 +194,9 @@ export function RunPanel() {
     setSelectedFixtureId,
     projectId,
     setProjectId,
+    projects,
+    activeProject,
+    activeProjectLocked,
     environment,
     setEnvironment,
     runEnvironment,
@@ -247,14 +233,17 @@ export function RunPanel() {
   // preserving the current selections.
   const refreshCatalog = useCallback(async () => {
     const q = `?project=${encodeURIComponent(projectId)}`;
+    // A locked private app returns 403 here; coerce any non-array (error) body to
+    // an empty list so the pickers stay well-formed until it's unlocked.
+    const asList = async <T,>(res: Response): Promise<T[]> => {
+      if (!res.ok) return [];
+      const body = await res.json().catch(() => []);
+      return Array.isArray(body) ? (body as T[]) : [];
+    };
     const [f, s, r] = await Promise.all([
-      fetch(`/api/fixtures${q}`).then(
-        (res) => res.json() as Promise<FixtureSummary[]>,
-      ),
-      fetch(`/api/suites${q}`).then((res) => res.json() as Promise<SuiteSummary[]>),
-      fetch(`/api/requirements${q}`).then(
-        (res) => res.json() as Promise<RequirementSummary[]>,
-      ),
+      fetch(`/api/fixtures${q}`).then((res) => asList<FixtureSummary>(res)),
+      fetch(`/api/suites${q}`).then((res) => asList<SuiteSummary>(res)),
+      fetch(`/api/requirements${q}`).then((res) => asList<RequirementSummary>(res)),
     ]);
     setFixtures(f);
     setSuites(s);
@@ -300,34 +289,136 @@ export function RunPanel() {
     }
   }
 
-  // Which environment preset the dropdown shows. Reconciled with the persisted
+  // Target environments for the active app (built-in Local/Remote + user-added),
+  // loaded from the DB. The dropdown selection is reconciled with the persisted
   // environment (restored asynchronously by the provider) so a reload reflects
-  // the last choice; "custom" when the stored URLs don't match a known preset.
-  const [envPresetId, setEnvPresetId] = useState<string>("default");
+  // the last choice.
+  const [targets, setTargets] = useState<TargetEnv[]>([]);
+  const [selectedTargetId, setSelectedTargetId] = useState<string>("");
+  // Form mode: null = none, "add" = new target, or the id of the target being edited.
+  const [targetForm, setTargetForm] = useState<null | "add" | { editId: string }>(null);
+  const [targetDraft, setTargetDraft] = useState({ name: "", baseUrl: "", apiUrl: "" });
+  const [savingTarget, setSavingTarget] = useState(false);
+  const [targetError, setTargetError] = useState<string | null>(null);
 
+  const loadTargets = useCallback(async (project: string) => {
+    const res = await fetch(`/api/targets?project=${encodeURIComponent(project)}`);
+    const list = (await res.json()) as TargetEnv[];
+    setTargets(Array.isArray(list) ? list : []);
+    return Array.isArray(list) ? list : [];
+  }, []);
+
+  // Select a target by id: remember it (so a reload restores the exact one even
+  // when several share URLs) and apply its URLs as the run environment.
+  const chooseTarget = useCallback(
+    (target: TargetEnv) => {
+      setSelectedTargetId(target.id);
+      try {
+        localStorage.setItem(SELECTED_TARGET_KEY, target.id);
+      } catch {
+        /* ignore */
+      }
+      setEnvironment({ baseUrl: target.baseUrl, apiUrl: target.apiUrl });
+    },
+    [setEnvironment],
+  );
+
+  // Load this app's targets on mount and whenever the active app changes.
   useEffect(() => {
-    setEnvPresetId((current) => {
-      if (current === "custom") return current; // don't disrupt active custom editing
-      const match = ENV_PRESETS.find(
-        (preset) =>
-          preset.id !== "custom" &&
-          preset.baseUrl === (environment.baseUrl ?? "") &&
-          preset.apiUrl === (environment.apiUrl ?? ""),
-      );
-      if (match) return match.id;
-      return environment.baseUrl || environment.apiUrl ? "custom" : "default";
-    });
-  }, [environment]);
+    void loadTargets(projectId);
+  }, [projectId, loadTargets]);
 
-  function applyPreset(id: string) {
-    setEnvPresetId(id);
-    const preset = ENV_PRESETS.find((p) => p.id === id);
-    if (!preset || id === "custom") return; // custom keeps the current URLs, edited inline
-    setEnvironment(
-      preset.baseUrl || preset.apiUrl
-        ? { baseUrl: preset.baseUrl, apiUrl: preset.apiUrl }
-        : {},
-    );
+  // Pick an initial selection only when the current one is missing/invalid (e.g.
+  // first load, or after switching apps). Selection is tracked by id and never
+  // re-derived from URLs once valid — otherwise a custom target that clones
+  // Remote's URLs would snap back to Remote. Preference: the remembered id, then
+  // a URL match for the restored environment, then the first target.
+  useEffect(() => {
+    if (targetForm || targets.length === 0) return;
+    if (selectedTargetId && targets.some((t) => t.id === selectedTargetId)) return;
+    let storedId = "";
+    try {
+      storedId = localStorage.getItem(SELECTED_TARGET_KEY) ?? "";
+    } catch {
+      /* ignore */
+    }
+    const chosen =
+      targets.find((t) => t.id === storedId) ??
+      targets.find(
+        (t) => t.baseUrl === (environment.baseUrl ?? "") && t.apiUrl === (environment.apiUrl ?? ""),
+      ) ??
+      targets[0]!;
+    chooseTarget(chosen);
+  }, [targets, environment, selectedTargetId, targetForm, chooseTarget]);
+
+  const selectedTarget = targets.find((t) => t.id === selectedTargetId) ?? null;
+
+  function selectTarget(value: string) {
+    if (value === ADD_TARGET) {
+      setTargetForm("add");
+      setTargetError(null);
+      setTargetDraft({
+        name: "",
+        baseUrl: environment.baseUrl ?? "",
+        apiUrl: environment.apiUrl ?? "",
+      });
+      return;
+    }
+    setTargetForm(null);
+    const target = targets.find((t) => t.id === value);
+    if (target) chooseTarget(target);
+  }
+
+  function startEditTarget(target: TargetEnv) {
+    setTargetForm({ editId: target.id });
+    setTargetError(null);
+    setTargetDraft({ name: target.name, baseUrl: target.baseUrl, apiUrl: target.apiUrl });
+  }
+
+  async function saveTarget() {
+    setSavingTarget(true);
+    setTargetError(null);
+    const editId = targetForm && targetForm !== "add" ? targetForm.editId : null;
+    try {
+      const res = await fetch(
+        editId ? `/api/targets?id=${encodeURIComponent(editId)}` : "/api/targets",
+        {
+          method: editId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editId ? targetDraft : { projectId, ...targetDraft }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setTargetError(
+          typeof data.error === "string"
+            ? data.error
+            : "Could not save target — check the name and that both URLs are absolute (http:// or https://).",
+        );
+        return;
+      }
+      await loadTargets(projectId);
+      setTargetForm(null);
+      const saved = data.target as TargetEnv | undefined;
+      if (saved) chooseTarget(saved);
+    } catch {
+      setTargetError("Could not save target.");
+    } finally {
+      setSavingTarget(false);
+    }
+  }
+
+  async function deleteTarget(id: string) {
+    try {
+      await fetch(`/api/targets?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {
+      /* ignore — the reload below reflects the real state */
+    }
+    setTargetForm(null);
+    const list = await loadTargets(projectId);
+    // The deleted id is gone, so the reconcile effect would normally re-pick, but
+    // do it here too for immediacy (falling back to the first remaining target).
+    if (id === selectedTargetId && list[0]) chooseTarget(list[0]);
   }
 
   // Populate the dropdowns on mount AND whenever the active project changes
@@ -439,52 +530,79 @@ export function RunPanel() {
   }
 
   // Switching apps re-points the catalog (handled by refreshCatalog, keyed on
-  // projectId) AND pre-fills the Target environment from that app's defaults.
+  // projectId) AND re-loads that app's target environments. The reconcile effect
+  // then selects the matching/first target for the new app.
   function applyProject(id: string) {
     setProjectId(id);
-    const proj = getProject(id);
-    if (proj) {
-      if (proj.brand) {
-        const host = hostFromUrl(proj.baseUrl) ?? "localhost";
-        setDomainBrand(host, proj.brand);
-      }
-      setEnvironment({ baseUrl: proj.baseUrl, apiUrl: proj.apiUrl });
-      setEnvPresetId("custom");
+    setTargetForm(null);
+    const proj = projects.find((p) => p.id === id);
+    if (proj && !proj.locked && (proj.productName || proj.companyName)) {
+      const host = hostFromUrl(proj.baseUrl) ?? "localhost";
+      setDomainBrand(host, {
+        productName: proj.productName ?? undefined,
+        companyName: proj.companyName ?? undefined,
+      });
     }
+    // setProjectId (in the provider) pre-fills the environment with the app's
+    // defaults; loading its targets lets the reconcile effect snap to a target.
+    void loadTargets(id);
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      <Card data-tour="app">
-        <CardHeader>
-          <CardTitle>App</CardTitle>
-          <CardDescription>
-            Which application&apos;s test catalog to run. Each app has its own
-            requirements, suites and fixtures; switching here re-points the lists
-            below and pre-fills the target with that app&apos;s defaults.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-3">
-            <select
-              className="h-9 min-w-56 rounded-md border border-border bg-muted px-3 text-sm"
-              value={projectId}
-              onChange={(event) => applyProject(event.target.value)}
-              disabled={running}
-            >
-              {PROJECTS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+  const appSelector = (
+    <Card data-tour="app">
+      <CardHeader>
+        <CardTitle>App</CardTitle>
+        <CardDescription>
+          Which application&apos;s test catalog to run. Each app has its own
+          requirements, suites and fixtures; switching here re-points the lists
+          below and pre-fills the target with that app&apos;s defaults.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            className="h-9 min-w-56 rounded-md border border-border bg-muted px-3 text-sm"
+            value={projectId}
+            onChange={(event) => applyProject(event.target.value)}
+            disabled={running}
+          >
+            {projects.length === 0 && <option value={projectId}>{projectId}</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+                {p.visibility === "private" ? (p.locked ? " 🔒" : " 🔓") : ""}
+              </option>
+            ))}
+          </select>
+          {activeProject?.locked ? (
+            <span className="inline-flex items-center gap-1 text-xs text-amber-400">
+              <Lock className="h-3.5 w-3.5" /> Private — unlock to run
+            </span>
+          ) : (
             <span className="text-xs text-muted-foreground">
               {requirements.length} requirement(s) · {suites.length} suite(s) ·{" "}
               {fixtures.length} fixture(s)
             </span>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // A locked private app exposes no catalog/target — offer only the app switcher
+  // and the unlock prompt until its key is provided.
+  if (activeProjectLocked) {
+    return (
+      <div className="flex flex-col gap-6">
+        {appSelector}
+        <LockedApp projectId={projectId} name={activeProject?.name ?? projectId} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {appSelector}
 
       <Card data-tour="target">
         <CardHeader>
@@ -499,70 +617,122 @@ export function RunPanel() {
           <div className="flex flex-wrap items-center gap-3">
             <select
               className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
-              value={envPresetId}
-              onChange={(event) => applyPreset(event.target.value)}
+              value={targetForm === "add" ? ADD_TARGET : selectedTargetId}
+              onChange={(event) => selectTarget(event.target.value)}
               disabled={running}
             >
-              {ENV_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label}
+              {targets.length === 0 && targetForm !== "add" && (
+                <option value="">No targets — add one</option>
+              )}
+              {targets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {target.name}
+                  {target.seeded ? "" : " (custom)"}
                 </option>
               ))}
+              <option value={ADD_TARGET}>＋ Add new…</option>
             </select>
-            {envPresetId !== "custom" && (
+            {!targetForm && selectedTarget && (
               <span className="text-xs text-muted-foreground">
-                {environment.baseUrl
-                  ? `Site ${environment.baseUrl} · API ${environment.apiUrl}`
-                  : "Using the URLs from the seed data."}
+                Site {selectedTarget.baseUrl} · API {selectedTarget.apiUrl}
+              </span>
+            )}
+            {!targetForm && selectedTarget && !selectedTarget.seeded && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => startEditTarget(selectedTarget)}
+                  disabled={running}
+                  title="Edit this custom target"
+                  className="inline-flex items-center gap-1 rounded p-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-primary disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteTarget(selectedTarget.id)}
+                  disabled={running}
+                  title="Forget this custom target"
+                  className="inline-flex items-center gap-1 rounded p-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+            {!targetForm && selectedTarget?.seeded && (
+              <span className="text-[11px] text-muted-foreground/70">
+                Built-in — add a new target to customize.
               </span>
             )}
           </div>
 
-          {envPresetId === "custom" && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                Site base URL
-                <input
-                  className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
-                  placeholder="https://app.example.com"
-                  value={environment.baseUrl ?? ""}
-                  onChange={(event) =>
-                    setEnvironment({
-                      ...environment,
-                      baseUrl: event.target.value.trim() || undefined,
-                    })
-                  }
-                  disabled={running}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-                API base URL
-                <input
-                  className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
-                  placeholder="https://api.example.com/api/v1"
-                  value={environment.apiUrl ?? ""}
-                  onChange={(event) =>
-                    setEnvironment({
-                      ...environment,
-                      apiUrl: event.target.value.trim() || undefined,
-                    })
-                  }
-                  disabled={running}
-                />
-              </label>
+          {targetForm && (
+            <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 p-3">
+              <span className="text-xs font-medium text-foreground">
+                {targetForm === "add" ? "New target" : "Edit target"}
+              </span>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  Name
+                  <input
+                    className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                    placeholder="Staging"
+                    value={targetDraft.name}
+                    onChange={(event) =>
+                      setTargetDraft({ ...targetDraft, name: event.target.value })
+                    }
+                    disabled={savingTarget}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  Site base URL
+                  <input
+                    className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                    placeholder="https://app.example.com"
+                    value={targetDraft.baseUrl}
+                    onChange={(event) =>
+                      setTargetDraft({ ...targetDraft, baseUrl: event.target.value })
+                    }
+                    disabled={savingTarget}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                  API base URL
+                  <input
+                    className="h-9 rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+                    placeholder="https://api.example.com/api/v1"
+                    value={targetDraft.apiUrl}
+                    onChange={(event) =>
+                      setTargetDraft({ ...targetDraft, apiUrl: event.target.value })
+                    }
+                    disabled={savingTarget}
+                  />
+                </label>
+              </div>
+              {targetError && <p className="text-xs text-destructive">{targetError}</p>}
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => void saveTarget()} disabled={savingTarget}>
+                  {savingTarget ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  {targetForm === "add" ? "Save target" : "Save changes"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setTargetForm(null);
+                    setTargetError(null);
+                  }}
+                  disabled={savingTarget}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
-
-          <div className="border-t border-border pt-3">
-            <SavedTargetsControl
-              environment={environment}
-              disabled={running}
-              onApply={(env) => {
-                setEnvironment(env);
-                setEnvPresetId("custom");
-              }}
-            />
-          </div>
 
           <div className="border-t border-border pt-3">
             <DomainBrandControl
@@ -799,7 +969,7 @@ export function RunPanel() {
                 <CardTitle className="flex items-center gap-2">
                   <Terminal className="h-4 w-4" />
                   Live console
-                  <EnvBadge env={runEnvironment} />
+                  <EnvBadge env={runEnvironment} targets={targets} />
                 </CardTitle>
                 <CardDescription>
                   {running
@@ -856,7 +1026,7 @@ export function RunPanel() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   Run results
-                  <EnvBadge env={runEnvironment} />
+                  <EnvBadge env={runEnvironment} targets={targets} />
                 </CardTitle>
                 <CardDescription>
                   {reports.length} result(s) ·{" "}

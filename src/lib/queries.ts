@@ -123,7 +123,8 @@ export async function getTestFixtureById(fixtureId: string) {
   return db.query.testFixtures.findFirst({
     where: eq(testFixtures.fixtureId, fixtureId),
     with: {
-      suite: true,
+      // Include the project id (via suite → FR) so the page can gate private apps.
+      suite: { with: { functionalRequirement: { columns: { projectId: true, title: true } } } },
       cases: { orderBy: desc(testCases.createdAt) },
     },
   });

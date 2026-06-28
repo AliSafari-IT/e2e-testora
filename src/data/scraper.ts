@@ -38,7 +38,10 @@ const API_DEFAULT = "http://localhost:3234/api/v1";
 // of once per run — keeps the whole suite well under the limit; a transient 429
 // (e.g. from a prior suite in the same minute) is retried with a short wait.
 const LOGIN_SNIPPET = [
-  "const api = run.apiUrl || '" + API_DEFAULT + "';",
+  // The chosen target's API base (set by the Run page) wins; fall back to the
+  // per-run input, then the local default — otherwise the commonInput apiUrl
+  // would pin every run to localhost and ignore the selected target.
+  "const api = process.env.WEBAPP_API_URL || run.apiUrl || '" + API_DEFAULT + "';",
   "async function getToken() {",
   "  // JWTs from /auth/login expire in ~15 min. The dev server process is",
   "  // long-lived and globalThis persists across fixture runs, so cache with a",

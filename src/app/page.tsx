@@ -1,16 +1,26 @@
 export const dynamic = "force-dynamic";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getFunctionalRequirements, getTestFixtures, getTestCases, getTestResults } from "@/lib/queries";
+import { getFunctionalRequirements, getTestFixtures, getTestCases, getResultsForReport } from "@/lib/queries";
+import { getActiveProjectId } from "@/lib/active-project";
+import { getProjectAccess } from "@/lib/app-access";
+import { LockedApp } from "@/components/locked-app";
 import { LatestResultRow } from "@/components/dashboard/latest-result";
 import { ListChecks, FlaskConical, PlayCircle, FileBarChart } from "lucide-react";
 
 export default async function DashboardPage() {
+  // Scoped to the active app (like every other page) so a locked private app's
+  // counts and results never leak onto the dashboard.
+  const projectId = await getActiveProjectId();
+  const access = await getProjectAccess(projectId);
+  if (access.locked) {
+    return <LockedApp projectId={projectId} name={access.project?.name ?? projectId} />;
+  }
   const [requirements, fixtures, cases, results] = await Promise.all([
-    getFunctionalRequirements(),
-    getTestFixtures(),
-    getTestCases(),
-    getTestResults(10),
+    getFunctionalRequirements(projectId),
+    getTestFixtures(projectId),
+    getTestCases(projectId),
+    getResultsForReport(10, projectId),
   ]);
 
   const passed = results.filter((r) => r.status === "passed").length;
@@ -42,21 +52,17 @@ export default async function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          {results.map((result) => {
-            const details = (result.details ?? {}) as Record<string, unknown>;
-            const screenshot = typeof details.screenshot === "string" ? details.screenshot : null;
-            return (
-              <LatestResultRow
-                key={result.id}
-                result={{
-                  id: result.id,
-                  status: result.status,
-                  title: result.case?.title ?? result.caseId,
-                  screenshot,
-                }}
-              />
-            );
-          })}
+          {results.map((result) => (
+            <LatestResultRow
+              key={result.id}
+              result={{
+                id: result.id,
+                status: result.status,
+                title: result.caseTitle || result.caseId,
+                screenshot: result.screenshot,
+              }}
+            />
+          ))}
         </CardContent>
       </Card>
     </div>
