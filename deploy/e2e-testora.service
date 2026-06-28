@@ -15,8 +15,9 @@ Wants=docker.service
 [Service]
 Type=simple
 WorkingDirectory=/var/repos/e2e-testora
-# pnpm "start" == "next start"; bind to loopback only, nginx fronts it.
-ExecStart=/usr/local/bin/pnpm start -- -H 127.0.0.1 -p 3007
+# Invoke Next directly (avoids pnpm forwarding a literal "--" to next start);
+# bind to loopback only, nginx fronts it.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3007
 Restart=always
 RestartSec=5
 SyslogIdentifier=e2e-testora
