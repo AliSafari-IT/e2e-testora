@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useRun } from "@/components/run-provider";
 
 /**
  * Shown in place of an app's data when the active app is private and this browser
@@ -13,6 +14,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
  */
 export function LockedApp({ projectId, name }: { projectId: string; name: string }) {
   const router = useRouter();
+  // The Run page gates on the client-side project registry (activeProject.locked),
+  // not a server render — so router.refresh() alone leaves it locked until a full
+  // reload. Re-fetch /api/projects so the context picks up the now-unlocked state.
+  const { refreshProjects } = useRun();
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +38,7 @@ export function LockedApp({ projectId, name }: { projectId: string; name: string
         return;
       }
       setKey("");
+      await refreshProjects();
       router.refresh();
     } catch {
       setError("Could not unlock");
