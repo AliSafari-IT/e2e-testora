@@ -17,7 +17,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
-    "test:e2e": "tsx src/test-engine/run.ts"
+    "test:e2e": "tsx src/test-engine/run.ts",
+    "service:restart": "sudo systemctl daemon-reload && sudo systemctl restart e2e-testora",
+    "service:status": "sudo systemctl status e2e-testora --no-pager"
   },
   "devEngines": {
     "packageManager": {
