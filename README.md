@@ -4,6 +4,7 @@
 
 ## Table of Contents
 - **Overview**: Short project description and goals.
+- **Latest Update**: Recent project changes.
 - **Tech Stack**: Key technologies used.
 - **Quick Start**: Install, configure, and run locally.
 - **Database**: Migrations and seeding instructions.
@@ -11,6 +12,7 @@
 - **API & Architecture**: Where code lives and how it works.
 - **Contributing**: How to help.
 - **Troubleshooting**: Common issues and fixes.
+- **Deployment**: VPS deployment scripts and ops.
 
 ## Overview
 
@@ -21,18 +23,22 @@
 
 The project is intended for local development and CI integration to run deterministic E2E tests.
 
+## Latest Update
+
+- **Privacy banner dismissal for UI tests**: shared browser login and admin smoke helpers (`src/data/_admin-shared.ts`) now automatically click any visible **Accept all** cookie/privacy banner before running assertions; profile and navbar dropdown tests (`src/data/profile.ts`) do the same after navigation. This fixes false failures where the banner obscured tab content and other UI elements.
+
 ## Tech Stack
 - **Framework**: `Next.js` (app router)
 - **Language**: `TypeScript`
 - **Styling**: `Tailwind CSS`
-- **DB / ORM**: `Drizzle` (see `db/`)
+- **DB / ORM**: `Drizzle` (see `src/db/`)
 - **Package manager**: `pnpm`
 - **Runtime / Tools**: Node.js, `pnpm` scripts, and Docker (optional)
 
 ## Prerequisites
 - Node.js (v16+ recommended)
 - `pnpm` installed globally
-- A working SQL database (the project uses the `db/` folder and Drizzle migration scripts)
+- A working SQL database (the project uses the `src/db/` folder and Drizzle migration scripts)
 
 ## Quick Start
 
@@ -53,12 +59,12 @@ pnpm install
 - Copy an `.env.example` to `.env` and fill values (if the repo includes one). If not present, ensure `DATABASE_URL` points to your SQL database and any required secrets are set.
 
 4. Database setup
-- Run migrations and seed the database. There are helper scripts in `db/`.
+- Run migrations and seed the database. There are helper scripts in `src/db/`.
 
 ```bash
 # If project provides scripts:
-pnpm run db:migrate || node db/migrate.ts
-pnpm run db:seed || node db/seed.ts
+pnpm run db:migrate || tsx src/db/migrate.ts
+pnpm run db:seed || tsx src/db/seed.ts
 ```
 
 5. Start the dev server:
@@ -76,18 +82,22 @@ Open http://localhost:3000 in your browser.
 - **Dev server**: `pnpm dev` or `pnpm run dev`
 - **Build**: `pnpm build` or `pnpm run build`
 - **Start**: `pnpm start` or `pnpm run start`
-- **Seed DB**: `pnpm run db:seed` (observed in repo)
+- **Type check**: `pnpm typecheck`
+- **Lint**: `pnpm lint`
+- **Clean `.next`**: `pnpm clean`
+- **Database**: `pnpm db:generate`, `pnpm db:migrate`, `pnpm db:studio`, `pnpm db:seed`
+- **Run E2E suite**: `pnpm test:e2e`
 
-If a script is not present in `package.json`, run the underlying script files in `db/` directly (e.g., `node db/seed.ts`). See [package.json](package.json) for available scripts.
+If a script is not present in `package.json`, run the underlying script files in `src/db/` directly (e.g., `tsx src/db/seed.ts`). See [package.json](package.json) for available scripts.
 
 ## Database
-- Migrations and helpers live in the `db/` folder: see [db/migrate.ts](db/migrate.ts) and [db/seed.ts](db/seed.ts).
+- Migrations and helpers live in the `src/db/` folder: see [src/db/migrate.ts](src/db/migrate.ts) and [src/db/seed.ts](src/db/seed.ts).
 - The codebase uses Drizzle; ensure `DATABASE_URL` points to your DB for migrations and runtime.
 
 ## API & Architecture
 - API routes live under `src/app/api/` (example: [src/app/api/cases/route.ts](src/app/api/cases/route.ts) and [src/app/api/run/route.ts](src/app/api/run/route.ts)).
 - UI pages and components are in `src/app/` and `src/components/`.
-- The test engine and generators are under `test-engine/` — look at `test-engine/run.ts` and `test-engine/executors/` for execution flow.
+- The test engine and generators are under `src/test-engine/` — look at [src/test-engine/run.ts](src/test-engine/run.ts) and [src/test-engine/executors/](src/test-engine/executors/) for execution flow.
 
 High-level flow:
 1. Create fixtures / suites via the UI or the API
@@ -97,13 +107,13 @@ High-level flow:
 
 ## Useful File References
 - `package.json`: project scripts and deps — [package.json](package.json)
-- DB helpers: [db/migrate.ts](db/migrate.ts), [db/seed.ts](db/seed.ts)
+- DB helpers: [src/db/migrate.ts](src/db/migrate.ts), [src/db/seed.ts](src/db/seed.ts)
 - API samples: [src/app/api/cases/route.ts](src/app/api/cases/route.ts), [src/app/api/run/route.ts](src/app/api/run/route.ts)
 - UI entry: [src/app/page.tsx](src/app/page.tsx), layout: [src/app/layout.tsx](src/app/layout.tsx)
 
 ## Testing
 
-The repository includes a `test-engine/` directory with generators and executors. Running end-to-end scenarios can be done through the UI or by POSTing to the run API endpoints.
+The repository includes a `src/test-engine/` directory with generators and executors. Running end-to-end scenarios can be done through the UI or by POSTing to the run API endpoints.
 
 Automated tests (unit / integration) are not included by default — add your preferred test runner (Vitest, Jest, Playwright) and create CI steps as needed.
 
@@ -117,8 +127,45 @@ Automated tests (unit / integration) are not included by default — add your pr
 - If you see TypeScript or build errors, run `pnpm build` locally to reproduce.
 
 ## Deployment
-- This is a standard Next.js app — you can deploy to Vercel, or build and run with `pnpm build` then `pnpm start`.
-- If you use Docker, see `docker-compose.yml` for local service composition.
+
+Production deployment targets the VPS at `testora.asafarim.com` and is managed by the files in `deploy/` and `scripts/`.
+
+### Components
+- **App** — `next start` on `127.0.0.1:3007` via systemd `e2e-testora`
+- **Database** — Postgres in Docker, bound to `127.0.0.1:55434` only
+- **Reverse proxy** — nginx with TLS via Let's Encrypt
+- **Test runs** — TestCafe drives the host's Google Chrome
+
+### Key files
+| File | Purpose |
+|---|---|
+| `scripts/server-setup.sh` | One-time idempotent provisioning |
+| `scripts/deploy.sh` | Repeatable redeploy |
+| `deploy/docker-compose.prod.yml` | Production Postgres container |
+| `deploy/e2e-testora.service` | systemd unit for the app |
+| `deploy/nginx/testora.asafarim.com.conf` | nginx TLS vhost |
+
+### First-time setup
+Run on the VPS as root:
+```bash
+bash /var/repos/e2e-testora/scripts/server-setup.sh
+# Then edit env vars and restart:
+nano /var/repos/e2e-testora/.env   # DATABASE_URL, WEBAPP_ADMIN_*, etc.
+systemctl restart e2e-testora
+```
+
+### Redeploy after changes
+```bash
+ssh vps 'bash /var/repos/e2e-testora/scripts/deploy.sh'
+```
+
+### Operations
+```bash
+systemctl status e2e-testora          # service health
+journalctl -u e2e-testora -f            # live logs
+docker logs -f e2e-testora-db           # database logs
+curl -I https://testora.asafarim.com    # public check
+```
 
 ## License & Credits
 - This project uses common OSS tools: Next.js, Tailwind CSS, Drizzle, and `pnpm`.

@@ -7,9 +7,6 @@ The app runs on the VPS at `/var/repos/e2e-testora`:
 - **Web** — nginx `testora.asafarim.com` → `127.0.0.1:3007`, TLS via Let's Encrypt
 - **Test runs** — in-process TestCafe drives the host's Google Chrome (`E2E_BROWSER`)
 
-This is independent of the unrelated `dotnet-testora` / `nodejs-testora` services
-already on the host (different names, ports, and code).
-
 ## Files
 
 | File | Purpose |
