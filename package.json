@@ -19,7 +19,9 @@
     "db:seed": "tsx src/db/seed.ts",
     "test:e2e": "tsx src/test-engine/run.ts",
     "service:restart": "sudo systemctl daemon-reload && sudo systemctl restart e2e-testora",
-    "service:status": "sudo systemctl status e2e-testora --no-pager"
+    "service:status": "sudo systemctl status e2e-testora --no-pager",
+    "deployToVPS": "ssh vps 'cd /var/repos/e2e-testora && bash /var/repos/e2e-testora/scripts/deploy.sh'",
+    "deployFromVPS": "cd /var/repos/e2e-testora && bash /var/repos/e2e-testora/scripts/deploy.sh"
   },
   "packageManager": "pnpm@11.2.2",
   "dependencies": {
