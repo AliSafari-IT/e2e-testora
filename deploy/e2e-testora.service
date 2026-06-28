@@ -1,0 +1,30 @@
+# systemd unit for the e2e-testora Next.js app.
+#
+# Install:
+#   sudo cp deploy/e2e-testora.service /etc/systemd/system/e2e-testora.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now e2e-testora
+#
+# Named "e2e-testora" on purpose, to avoid colliding with the unrelated
+# dotnet-testora / nodejs-testora services already on this host.
+[Unit]
+Description=e2e-testora (Testora E2E platform, Next.js)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/var/repos/e2e-testora
+# pnpm "start" == "next start"; bind to loopback only, nginx fronts it.
+ExecStart=/usr/local/bin/pnpm start -- -H 127.0.0.1 -p 3007
+Restart=always
+RestartSec=5
+SyslogIdentifier=e2e-testora
+User=root
+Environment=NODE_ENV=production
+# Everything else (DATABASE_URL, PORT, browser flags, target creds) comes from
+# the repo .env. systemd reads it verbatim — no quoting needed for values.
+EnvironmentFile=/var/repos/e2e-testora/.env
+
+[Install]
+WantedBy=multi-user.target

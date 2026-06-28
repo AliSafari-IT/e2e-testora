@@ -1,0 +1,30 @@
+# Production Postgres for e2e-testora.
+#
+# Standalone (do NOT combine with the repo's root docker-compose.yml — that one
+# publishes 0.0.0.0:55434 which would expose the DB to the internet). This file
+# binds to 127.0.0.1 only; the app reaches it over localhost and nginx is the
+# only public surface.
+#
+#   docker compose -f deploy/docker-compose.prod.yml up -d
+#
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: e2e-testora-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-e2e_testora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-e2e_testora}
+      POSTGRES_DB: ${POSTGRES_DB:-e2e-testing-db}
+    ports:
+      - "127.0.0.1:55434:5432"
+    volumes:
+      - e2e_testora_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-e2e_testora} -d ${POSTGRES_DB:-e2e-testing-db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  e2e_testora_pgdata:
