@@ -190,6 +190,9 @@ export const scraperTestCases: TestCaseDefinition[] = [
         url: "https://www.zimmo.be/nl/meise-1860/te-koop/bedrijfsvastgoed/L36KT/",
       },
       {
+        url: "https://www.zimmo.be/nl/hasselt-3500/te-koop/huis/LPR1B/",
+      },
+      {
         url: "https://www.immoweb.be/nl/zoekertje/huis/te-koop/houthalen-helchteren/3530/21654774",
       },
       {
