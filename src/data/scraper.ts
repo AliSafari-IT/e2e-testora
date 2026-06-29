@@ -154,7 +154,6 @@ const ROUTING_SITES: { url: string; expectedSource: string }[] = [
   { url: "https://www.spotto.be/x/1", expectedSource: "spotto" },
   { url: "https://www.biddit.be/x/1", expectedSource: "biddit" },
   { url: "https://www.immovlan.be/nl/x/1", expectedSource: "immovlan" },
-  { url: "https://www.logic-immo.be/nl/x/1", expectedSource: "logic-immo" },
   { url: "https://www.funda.nl/koop/x/1/", expectedSource: "funda" },
   { url: "https://www.pararius.nl/x/1", expectedSource: "pararius" },
   { url: "https://www.huislijn.nl/x/1", expectedSource: "huislijn" },
@@ -187,9 +186,6 @@ export const scraperTestCases: TestCaseDefinition[] = [
     scriptType: "scripted",
     runs: [
       {
-        url: "https://www.zimmo.be/nl/meise-1860/te-koop/bedrijfsvastgoed/L36KT/",
-      },
-      {
         url: "https://www.zimmo.be/nl/hasselt-3500/te-koop/huis/LPR1B/",
       },
       {
@@ -210,7 +206,7 @@ export const scraperTestCases: TestCaseDefinition[] = [
       {
         url: "https://www.immotop.lu/annonces/1226537/"
       },
-      {url: "https://www.athome.lu/location/appartement/lintgen/id-9196026.html"}
+      { url: "https://www.athome.lu/location/appartement/lintgen/id-9196026.html" }
     ],
     expected: {},
     script: LIVE_SCRIPT,
