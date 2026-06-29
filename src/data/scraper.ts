@@ -206,7 +206,8 @@ export const scraperTestCases: TestCaseDefinition[] = [
       {
         url: "https://www.immotop.lu/annonces/1226537/"
       },
-      { url: "https://www.athome.lu/location/appartement/lintgen/id-9196026.html" }
+      { url: "https://www.athome.lu/location/appartement/lintgen/id-9196026.html" },
+      { url: "https://aanbod.vastgoednederland.nl/koopwoningen/tilburg/woning-647665-nieuwstraat-130b" }
     ],
     expected: {},
     script: LIVE_SCRIPT,
