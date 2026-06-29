@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Camera,
   Check,
@@ -811,62 +812,54 @@ export function RunPanel() {
 
           <div className="flex flex-wrap items-center gap-3">
             {scope === "fixture" && (
-              <select
-                className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
-                value={selectedFixtureId}
-                onChange={(event) => setSelectedFixtureId(event.target.value)}
+              <Combobox
+                triggerClassName="min-w-72"
                 disabled={running}
-              >
-                {fixtures.length === 0 && (
-                  <option value="">No fixtures available</option>
-                )}
-                {fixtures.map((fixture) => (
-                  <option key={fixture.fixtureId} value={fixture.fixtureId}>
-                    {fixture.title} ({fixture.caseCount} cases)
-                  </option>
-                ))}
-              </select>
+                value={selectedFixtureId}
+                onChange={setSelectedFixtureId}
+                placeholder="No fixtures available"
+                searchPlaceholder="Search fixtures…"
+                emptyText="No matching fixtures"
+                options={fixtures.map((fixture) => ({
+                  value: fixture.fixtureId,
+                  label: fixture.title,
+                  hint: `(${fixture.caseCount} cases)`,
+                }))}
+              />
             )}
 
             {scope === "suite" && (
-              <select
-                className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
-                value={selectedSuiteId}
-                onChange={(event) => setSelectedSuiteId(event.target.value)}
+              <Combobox
+                triggerClassName="min-w-72"
                 disabled={running}
-              >
-                {suites.length === 0 && (
-                  <option value="">No suites available</option>
-                )}
-                {suites.map((suite) => (
-                  <option key={suite.suiteId} value={suite.suiteId}>
-                    {suite.title} ({suite.fixtureCount} fixtures,{" "}
-                    {suite.caseCount} cases)
-                  </option>
-                ))}
-              </select>
+                value={selectedSuiteId}
+                onChange={setSelectedSuiteId}
+                placeholder="No suites available"
+                searchPlaceholder="Search suites…"
+                emptyText="No matching suites"
+                options={suites.map((suite) => ({
+                  value: suite.suiteId,
+                  label: suite.title,
+                  hint: `(${suite.fixtureCount} fixtures, ${suite.caseCount} cases)`,
+                }))}
+              />
             )}
 
             {scope === "requirement" && (
-              <select
-                className="h-9 rounded-md border border-border bg-muted px-3 text-sm"
-                value={selectedRequirementId}
-                onChange={(event) =>
-                  setSelectedRequirementId(event.target.value)
-                }
+              <Combobox
+                triggerClassName="min-w-72"
                 disabled={running}
-              >
-                {requirements.length === 0 && (
-                  <option value="">No requirements available</option>
-                )}
-                {requirements.map((requirement) => (
-                  <option key={requirement.id} value={requirement.id}>
-                    {requirement.title} ({requirement.suiteCount} suites,{" "}
-                    {requirement.fixtureCount} fixtures, {requirement.caseCount}{" "}
-                    cases)
-                  </option>
-                ))}
-              </select>
+                value={selectedRequirementId}
+                onChange={setSelectedRequirementId}
+                placeholder="No requirements available"
+                searchPlaceholder="Search requirements…"
+                emptyText="No matching requirements"
+                options={requirements.map((requirement) => ({
+                  value: requirement.id,
+                  label: requirement.title,
+                  hint: `(${requirement.suiteCount} suites, ${requirement.fixtureCount} fixtures, ${requirement.caseCount} cases)`,
+                }))}
+              />
             )}
 
             {scope === "all" && (
