@@ -1,0 +1,121 @@
+name: CodeQL (self-hosted, no Advanced Security)
+
+# This workflow runs CodeQL locally on the probex self-hosted runner
+# without uploading the SARIF to GitHub's Security tab. GitHub
+# Advanced Security is paid (not enabled on this plan); the upload-
+# results step is the only thing it gates. We still get full static
+# analysis — the SARIF is published as a workflow artifact that
+# anyone with repo access can download and inspect.
+#
+# Trigger: weekly cron + manual dispatch.
+# Speedup (2026-06-01): the per-push trigger was removed. This deep scan can
+# run up to 60 min building a CodeQL DB on the SINGLE self-hosted runner, where
+# it serialized ahead of deploy-critical CI Validation on every main commit —
+# and GitHub's managed "default setup" CodeQL already scans pushes/PRs in
+# parallel (so the self-hosted run was redundant per-push). Keep it as the
+# weekly deep self-hosted scan + on-demand; the managed CodeQL covers per-change.
+# When Advanced Security is later turned on, swap the SARIF-artifact step for
+# `github/codeql-action/upload-sarif@v3` to surface results in the Security tab.
+
+on:
+  schedule:
+    # Sundays 03:17 UTC — outside the typical CI rush window.
+    - cron: '17 3 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-self-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  analyze:
+    name: CodeQL Analyze (${{ matrix.language }})
+    runs-on: [self-hosted, probex, prod]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # CodeQL CLI v2.20.x only ships the legacy `javascript` language
+        # pack on the public GitHub Container Registry — the bundled
+        # `javascript-typescript-queries` umbrella pack landed in v2.21+
+        # and resolves to HTTP 403 Forbidden on 2.20.0. The `javascript`
+        # pack already analyses TypeScript sources (TS compiles down
+        # through the same extractor), so we keep the established pack
+        # name pinned here until the runner upgrades CodeQL.
+        language: [javascript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CodeQL CLI
+        run: |
+          set -euo pipefail
+          # Bump 2.20.0 → 2.25.4 (2026-05-07 stable): the
+          # codeql/javascript-queries pack v2.3.x uses the `overlay`
+          # annotation and the `forceLocal` higher-order predicate,
+          # both introduced in CLI v2.21+. CLI 2.20.0 emitted hundreds
+          # of "unknown annotation 'overlay'" / "No higher-order
+          # predicate with name forceLocal" parse errors before the
+          # analyser ever ran. Pinning to the current stable line.
+          CODEQL_VERSION="${CODEQL_VERSION:-2.25.4}"
+          INSTALL_DIR="$HOME/.cache/codeql/$CODEQL_VERSION"
+          if [ ! -x "$INSTALL_DIR/codeql/codeql" ]; then
+            mkdir -p "$INSTALL_DIR"
+            curl -sSL -o /tmp/codeql.zip \
+              "https://github.com/github/codeql-cli-binaries/releases/download/v${CODEQL_VERSION}/codeql-linux64.zip"
+            unzip -q /tmp/codeql.zip -d "$INSTALL_DIR"
+            rm /tmp/codeql.zip
+          fi
+          echo "$INSTALL_DIR/codeql" >> "$GITHUB_PATH"
+          "$INSTALL_DIR/codeql/codeql" version
+
+      - name: Initialize CodeQL database
+        run: |
+          set -euo pipefail
+          rm -rf .codeql-db
+          codeql database create .codeql-db \
+            --language=${{ matrix.language }} \
+            --source-root=. \
+            --overwrite
+
+      - name: Run CodeQL queries (security-and-quality suite)
+        run: |
+          set -euo pipefail
+          mkdir -p .codeql-out
+          codeql database analyze .codeql-db \
+            "codeql/${{ matrix.language }}-queries:codeql-suites/${{ matrix.language }}-security-and-quality.qls" \
+            --format=sarif-latest \
+            --output=.codeql-out/results-${{ matrix.language }}.sarif \
+            --download
+
+      - name: Summarize result counts (stdout)
+        if: always()
+        run: |
+          set -euo pipefail
+          SARIF=.codeql-out/results-${{ matrix.language }}.sarif
+          if [ ! -f "$SARIF" ]; then
+            echo "no SARIF produced" >&2
+            exit 0
+          fi
+          TOTAL=$(jq '[.runs[].results[]] | length' "$SARIF" 2>/dev/null || echo "?")
+          ERRORS=$(jq '[.runs[].results[] | select((.level // "warning") == "error")] | length' "$SARIF" 2>/dev/null || echo "?")
+          WARNS=$(jq '[.runs[].results[] | select((.level // "warning") == "warning")] | length' "$SARIF" 2>/dev/null || echo "?")
+          NOTES=$(jq '[.runs[].results[] | select((.level // "warning") == "note")] | length' "$SARIF" 2>/dev/null || echo "?")
+          echo "::notice ::CodeQL ${{ matrix.language }} — total=$TOTAL errors=$ERRORS warnings=$WARNS notes=$NOTES"
+
+      - name: Upload SARIF as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: .codeql-out/results-${{ matrix.language }}.sarif
+          retention-days: 30
+
+      - name: Cleanup database (free disk)
+        if: always()
+        run: |
+          rm -rf .codeql-db .codeql-out
