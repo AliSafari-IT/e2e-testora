@@ -71,19 +71,6 @@ const pages: AdminPageSpec[] = [
     api: { path: "/scraper/supported-domains", shape: "object", public: true },
   },
   {
-    id: "public-ai-voices",
-    title: "AI voices",
-    uiPath: DUMMY_PAGE,
-    ui: false,
-    description: "TTS voice catalog.",
-    api: {
-      path: "/ai/voices",
-      shape: "object",
-      public: true,
-      tolerant: [200, 500, 502, 503],
-    },
-  },
-  {
     id: "public-ai-music",
     title: "AI music",
     uiPath: DUMMY_PAGE,

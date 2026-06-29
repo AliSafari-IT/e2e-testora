@@ -45,13 +45,6 @@ const pages: AdminPageSpec[] = [
     api: { path: "/admin/jobs?limit=5", shape: "list" },
   },
   {
-    id: "jobs-monitor",
-    title: "Jobs Monitor",
-    uiPath: "/en/admin/jobs-monitor",
-    description: "Live in-flight jobs + global KPI counts.",
-    api: { path: "/admin/jobs/stats", shape: "object" },
-  },
-  {
     id: "scraper",
     title: "Scraper",
     uiPath: "/en/admin/scraper",

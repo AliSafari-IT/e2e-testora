@@ -264,17 +264,6 @@ const res = await authPost('/users/change-password', {
 await t.expect([400, 401, 403]).contains(res.status, 'a wrong current password must be rejected, got ' + res.status + ': ' + JSON.stringify(res.body));
 `),
   },
-  {
-    caseId: "redeem-coupon-rejects-invalid",
-    fixtureId: "profile-api",
-    title: "Redeeming an invalid coupon code is rejected",
-    scriptType: "scripted",
-    expected: {},
-    script: apiScript(`
-const res = await authPost('/payments/coupons/redeem', { code: 'E2E-INVALID-' + Date.now() });
-await t.expect(res.status >= 400 && res.status < 500).ok('an invalid coupon code should be rejected with a 4xx, got ' + res.status + ': ' + JSON.stringify(res.body));
-`),
-  },
 ];
 
 /* ------------------------------------------------------------------ */

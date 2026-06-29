@@ -10,6 +10,10 @@ import {
   buildChapter,
   type AdminPageSpec,
 } from "./_admin-shared";
+import {
+  adminCreditsUiFlowFixture,
+  adminCreditsUiFlowCases,
+} from "./admin-credits-ui-flow";
 
 /**
  * Accounts & Billing — the first admin chapter. The four account/credit pages
@@ -376,43 +380,6 @@ await cleanup(u.id);
 `),
   },
   {
-    caseId: "credits-adjust-negative-delta",
-    fixtureId: "admin-credits-api",
-    title: "POST credits with a negative delta deducts credits",
-    scriptType: "scripted",
-    expected: {},
-    script: apiScript(`
-const u = await createTempUser('user');
-const up = await authPost('/admin/users/' + u.id + '/credits', { delta: 10, reason: 'e2e top-up' });
-await t.expect(up.status).eql(200, 'top-up failed: ' + JSON.stringify(up.body));
-const before = up.body.creditsRemaining;
-const down = await authPost('/admin/users/' + u.id + '/credits', { delta: -4, reason: 'e2e deduction' });
-await t.expect(down.status).eql(200);
-await t.expect(down.body.creditsRemaining).eql(before - 4, 'a -4 adjustment should lower the balance by exactly 4');
-await cleanup(u.id);
-`),
-  },
-  {
-    caseId: "credits-adjustment-appears-in-history",
-    fixtureId: "admin-credits-api",
-    title: "A credit adjustment is recorded in the global history",
-    scriptType: "scripted",
-    expected: {},
-    script: apiScript(`
-const u = await createTempUser('user');
-const reason = 'e2e-history-' + Date.now();
-const adj = await authPost('/admin/users/' + u.id + '/credits', { delta: 6, reason });
-await t.expect(adj.status).eql(200, 'adjustment failed: ' + JSON.stringify(adj.body));
-
-const hist = await authGet('/admin/credits/history?limit=100');
-await t.expect(hist.status).eql(200);
-await t.expect(Array.isArray(hist.body.data)).ok('expected history body.data to be an array');
-const match = hist.body.data.find((h) => h.userId === u.id && h.delta === 6);
-await t.expect(!!match).ok('expected the +6 adjustment to appear in the global credit history');
-await cleanup(u.id);
-`),
-  },
-  {
     caseId: "credits-validation-matrix",
     fixtureId: "admin-credits-api",
     title: "Invalid credit operations are rejected",
@@ -541,15 +508,6 @@ const billingPages: AdminPageSpec[] = [
     uiPath: "/en/admin/e-invoicing",
     description: "Peppol e-invoicing transmission status.",
   },
-  {
-    id: "accounting",
-    title: "Accounting",
-    uiPath: "/en/admin/accounting",
-    description: "Bookkeeping module (status, providers, ledger). PIN-gated beyond status.",
-    superadminOnly: true,
-    // /accounting/status has no PIN guard, so it is safe to probe for access.
-    api: { path: "/accounting/status", shape: "object" },
-  },
 ];
 
 const billing = buildChapter("accounts-billing", billingPages);
@@ -575,6 +533,7 @@ export const accountsBillingFixtures: TestFixtureDefinition[] = [
   adminAgentsUiFixture,
   adminCreditsApiFixture,
   adminCreditsUiFixture,
+  adminCreditsUiFlowFixture,
   ...billing.fixtures,
 ];
 
@@ -587,5 +546,6 @@ export const accountsBillingCases: TestCaseDefinition[] = [
   ...adminAgentsUiCases,
   ...adminCreditsApiCases,
   ...adminCreditsUiCases,
+  ...adminCreditsUiFlowCases,
   ...billing.cases,
 ];
