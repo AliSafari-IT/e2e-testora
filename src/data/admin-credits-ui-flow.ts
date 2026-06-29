@@ -2,7 +2,6 @@ import type {
   TestFixtureDefinition,
   TestCaseDefinition,
 } from "@/test-engine/types";
-import { BROWSER_ADMIN_LOGIN } from "./_admin-shared";
 
 /**
  * Browser flow for the admin Credits dashboard, mirroring the manual path:
@@ -22,17 +21,65 @@ import { BROWSER_ADMIN_LOGIN } from "./_admin-shared";
  * Destructive: it creates a real (soft-deletable) account and mutates its
  * credits — never run against a web deployment.
  *
- * Selectors lean on structural/stable hooks (input[type=number|search],
- * the modal's English "Assign Credits" literal, the row's only <button>) rather
- * than the heavily-i18n'd table copy.
+ * Auth note: the fixture setup logs in once; the browser session persists across
+ * the two cases. So each case navigates *directly* to its target admin page via
+ * ensureAuthedAt() and only logs in if the app actually bounces it to /login.
+ * (Re-running the full BROWSER_ADMIN_LOGIN here would navigate to /en/login while
+ * already authenticated, racing the form against the auto-redirect.)
+ *
+ * Selectors lean on structural/stable hooks (input[type=number|search], the
+ * modal's English "Assign Credits" literal, the row's only <button>) rather than
+ * the heavily-i18n'd table copy.
+ *
+ * The engine runs setupScript as fixture.beforeEach, so each case gets its own
+ * fresh user. Both setup and cases reach their page via ensureAuthedAt(), which
+ * never navigates to /en/login while already authenticated (that flashes the
+ * login form then auto-redirects, racing the form fill).
  */
-
-const LOGIN_BLOCK = BROWSER_ADMIN_LOGIN;
 
 // Resolve the app origin the same way the wizard flow does, so an absolute
 // navigation is never stuck on a previous external domain.
 const APP_BASE =
   "const appBase = (typeof run !== 'undefined' && run && run.baseUrl) ? run.baseUrl : (process.env.WEBAPP_BASE_URL || 'http://localhost:3233');";
+
+// Idempotent "be logged in, on this page" helper used by the cases. Navigates
+// straight to the target (the setup already authenticated); only if the app
+// redirects to /login does it perform the login and retry. Also defines
+// dismissPrivacyBanner (normally provided by BROWSER_ADMIN_LOGIN).
+const ENSURE_ADMIN_SESSION = [
+  "const ADMIN_EMAIL = process.env.WEBAPP_ADMIN_EMAIL || 'admin@example.com';",
+  "const password = process.env.WEBAPP_ADMIN_PASSWORD || '';",
+  "async function dismissPrivacyBanner() {",
+  "  const acceptAll = Selector('button, a, [role=\"button\"]').withText(/Accept all/i).filterVisible();",
+  "  if (await acceptAll.exists) { await t.click(acceptAll); await t.wait(500); }",
+  "}",
+  "async function ensureAuthedAt(path) {",
+  "  for (let attempt = 0; attempt < 3; attempt++) {",
+  "    await t.navigateTo(appBase + path);",
+  "    await t.wait(1500);",
+  "    const onLogin = (await t.eval(() => window.location.pathname)).indexOf('/login') !== -1;",
+  "    if (!onLogin) { await dismissPrivacyBanner(); return; }",
+  "    // Genuinely unauthenticated (no redirect race) — log in, then retry nav.",
+  "    const emailInput = Selector('[data-testid=\"login-email\"]');",
+  "    const passwordInput = Selector('[data-testid=\"login-password\"]');",
+  "    const submitButton = Selector('[data-testid=\"login-submit\"]');",
+  "    if (!(await emailInput.with({ timeout: 25000 }).exists)) { await t.wait(15000); continue; }",
+  "    try { await t.expect(submitButton.hasAttribute('disabled')).notOk({ timeout: 30000 }); } catch (e) { /* proceed */ }",
+  "    for (let i = 0; i < 4; i++) {",
+  "      await t.typeText(emailInput, ADMIN_EMAIL, { replace: true });",
+  "      await t.typeText(passwordInput, password, { replace: true });",
+  "      if ((await emailInput.value) === ADMIN_EMAIL && (await passwordInput.value) === password) break;",
+  "      await t.wait(1000);",
+  "    }",
+  "    await t.click(submitButton);",
+  "    for (let i = 0; i < 25; i++) {",
+  "      if ((await t.eval(() => window.location.pathname)).indexOf('/login') === -1) break;",
+  "      await t.wait(1000);",
+  "    }",
+  "  }",
+  "  await dismissPrivacyBanner();",
+  "}",
+].join("\n");
 
 // Re-find the created user's row in the *users* table (the first table; the
 // second is the credit history, which also lists emails). Assumes the search
@@ -51,10 +98,16 @@ const SEARCH_FOR_USER = [
   FIND_USER_ROW,
 ].join("\n");
 
+const REQUIRE_STASHED_EMAIL = [
+  "const email = globalThis.__creditsFlowEmail || '';",
+  "await t.expect(email.length).gt(0, 'Fixture setup did not stash a user email — did the create-user setup run?');",
+].join("\n");
+
 // ─── Setup: create the user via the Users page UI ────────────────────────────
 
 const CREDITS_UI_SETUP = [
-  LOGIN_BLOCK,
+  APP_BASE,
+  ENSURE_ADMIN_SESSION,
   "",
   "// Unique, plus-addressed email so the account is re-runnable and lands in a",
   "// mailbox the admin controls.",
@@ -65,9 +118,8 @@ const CREDITS_UI_SETUP = [
   "const email = localPart + '+e2eui' + Date.now() + '_' + Math.floor(Math.random() * 1e6) + '@' + domain;",
   "globalThis.__creditsFlowEmail = email;",
   "",
-  APP_BASE,
-  "await t.navigateTo(appBase + '/en/admin/users');",
-  "await dismissPrivacyBanner();",
+  "// Land on the Users page, logging in only if the app bounces us to /login.",
+  "await ensureAuthedAt('/en/admin/users');",
   "",
   "// ── Open the Create user form ─────────────────────────────────────────────",
   "const createUserBtn = Selector('button').withText(/create user/i).filterVisible().nth(0);",
@@ -81,15 +133,15 @@ const CREDITS_UI_SETUP = [
   "await t.typeText(emailInput, email, { replace: true });",
   "await t.typeText(pwInput, 'TestPass123!', { replace: true });",
   "// Role select is pre-set to User on the Users page; assert it to honour the",
-  "// 'role user' intent without a brittle dropdown interaction.",
+  "// 'role user' intent without a brittle dropdown interaction. Pass the selector",
+  "// property to t.expect (no await) so it re-queries rather than snapshotting.",
   "const roleSelect = Selector('select').filterVisible().nth(0);",
-  "if (await roleSelect.exists) await t.expect((await roleSelect.value)).eql('user', 'Expected the new account role to default to user');",
+  "if (await roleSelect.exists) await t.expect(roleSelect.value).eql('user', 'Expected the new account role to default to user');",
   "",
   "// ── Submit and confirm creation (the form closes only on success) ─────────",
   "const submitCreate = Selector('button[type=\"submit\"]').withText(/create/i).filterVisible().nth(0);",
   "await t.click(submitCreate);",
-  "await t.expect(Selector('input[type=\"email\"]').exists).notOk({ timeout: 20000 }).catch(() => {});",
-  "await t.expect(await Selector('input[type=\"email\"]').exists).notOk('The create-user form did not close — creation likely failed (duplicate email or validation error) for ' + email);",
+  "await t.expect(emailInput.with({ timeout: 20000 }).exists).notOk('The create-user form did not close — creation likely failed (duplicate email or validation error) for ' + email);",
 ].join("\n");
 
 // ─── Fixture ─────────────────────────────────────────────────────────────────
@@ -115,12 +167,10 @@ export const adminCreditsUiFlowCases: TestCaseDefinition[] = [
     scriptType: "scripted",
     expected: {},
     script: [
-      LOGIN_BLOCK,
-      "const email = globalThis.__creditsFlowEmail || '';",
-      "await t.expect(email.length).gt(0, 'Fixture setup did not stash a user email — did the create-user setup run?');",
       APP_BASE,
-      "await t.navigateTo(appBase + '/en/admin/credits');",
-      "await dismissPrivacyBanner();",
+      ENSURE_ADMIN_SESSION,
+      REQUIRE_STASHED_EMAIL,
+      "await ensureAuthedAt('/en/admin/credits');",
       "",
       "// Find the user, open the Assign Credits modal via the row's +Credits button.",
       SEARCH_FOR_USER,
@@ -130,7 +180,7 @@ export const adminCreditsUiFlowCases: TestCaseDefinition[] = [
       "const amountInput = Selector('input[type=\"number\"]').filterVisible().nth(0);",
       "await t.expect(amountInput.with({ timeout: 15000 }).exists).ok('Expected the credit amount input in the Assign Credits modal');",
       "await t.typeText(amountInput, '-2', { replace: true });",
-      "await t.expect(await amountInput.value).eql('-2', 'Expected the amount field to hold -2');",
+      "await t.expect(amountInput.value).eql('-2', 'Expected the amount field to hold -2');",
       "",
       "// Submit — native constraint validation must block it.",
       "const assignBtn = Selector('button[type=\"submit\"]').withText(/assign credits/i).filterVisible().nth(0);",
@@ -160,12 +210,10 @@ export const adminCreditsUiFlowCases: TestCaseDefinition[] = [
     scriptType: "scripted",
     expected: {},
     script: [
-      LOGIN_BLOCK,
-      "const email = globalThis.__creditsFlowEmail || '';",
-      "await t.expect(email.length).gt(0, 'Fixture setup did not stash a user email — did the create-user setup run?');",
       APP_BASE,
-      "await t.navigateTo(appBase + '/en/admin/credits');",
-      "await dismissPrivacyBanner();",
+      ENSURE_ADMIN_SESSION,
+      REQUIRE_STASHED_EMAIL,
+      "await ensureAuthedAt('/en/admin/credits');",
       "",
       SEARCH_FOR_USER,
       "",
