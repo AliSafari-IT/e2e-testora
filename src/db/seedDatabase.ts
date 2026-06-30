@@ -123,7 +123,7 @@ interface SeedBundle {
   projectId?: string;
 }
 
-const bundles: SeedBundle[] = [
+const baseBundles: SeedBundle[] = [
   {
     fr: authenticationFR,
     suites: [loginFlowSuite],
@@ -226,6 +226,49 @@ const bundles: SeedBundle[] = [
     projectId: "asafarim-vionto",
   },
 ];
+
+/**
+ * Create a deep copy of a seed bundle for another project, prefixing every id
+ * (and the internal references between fr / suite / fixture / case) so the
+ * duplicate lives in the catalog alongside the original without colliding on
+ * primary keys.
+ */
+function cloneBundle(bundle: SeedBundle, projectId: string, prefix: string): SeedBundle {
+  const makeId = (id: string) => `${prefix}${id}`;
+
+  const idMap = new Map<string, string>();
+  idMap.set(bundle.fr.id, makeId(bundle.fr.id));
+  for (const suite of bundle.suites) idMap.set(suite.suiteId, makeId(suite.suiteId));
+  for (const fixture of bundle.fixtures) idMap.set(fixture.fixtureId, makeId(fixture.fixtureId));
+  for (const testCase of bundle.cases) idMap.set(testCase.caseId, makeId(testCase.caseId));
+
+  const mapId = (id: string) => idMap.get(id) ?? id;
+
+  return {
+    projectId,
+    fr: { ...bundle.fr, id: mapId(bundle.fr.id), projectId },
+    suites: bundle.suites.map((suite) => ({ ...suite, suiteId: mapId(suite.suiteId), frId: mapId(suite.frId) })),
+    fixtures: bundle.fixtures.map((fixture) => ({
+      ...fixture,
+      fixtureId: mapId(fixture.fixtureId),
+      suiteId: mapId(fixture.suiteId),
+    })),
+    cases: bundle.cases.map((testCase) => ({
+      ...testCase,
+      caseId: mapId(testCase.caseId),
+      fixtureId: mapId(testCase.fixtureId),
+    })),
+  };
+}
+
+const IMMO_LOCAL_ID = "immo-local";
+const IMMO_LOCAL_PREFIX = `${IMMO_LOCAL_ID}:`;
+
+const immoLocalBundles = baseBundles
+  .filter((b) => (b.projectId ?? b.fr.projectId ?? DEFAULT_PROJECT_ID) === DEFAULT_PROJECT_ID)
+  .map((b) => cloneBundle(b, IMMO_LOCAL_ID, IMMO_LOCAL_PREFIX));
+
+const bundles: SeedBundle[] = [...baseBundles, ...immoLocalBundles];
 
 export interface SeedSummary {
   title: string;

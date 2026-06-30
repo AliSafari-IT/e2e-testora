@@ -96,8 +96,22 @@ const ASAFARIM_VIONTO: ProjectDef = {
   brand: { productName: "Vionto", companyName: "ASafariM Digital" },
 };
 
+// Immo Local — a local deployment of the ImmoStory app. Shares the same test
+// catalog as the main ImmoStory project but targets the local dev server by
+// default. The display name and URLs are env-overrideable.
+const IMMO_LOCAL_PROJECT: ProjectDef = {
+  id: "immo-local",
+  name: process.env.NEXT_PUBLIC_IMMO_LOCAL_NAME || "Immo Local",
+  baseUrl: process.env.NEXT_PUBLIC_IMMO_LOCAL_BASE_URL || LOCAL_BASE,
+  apiUrl: process.env.NEXT_PUBLIC_IMMO_LOCAL_API_URL || LOCAL_API,
+  targets: [
+    { slug: "local", name: "Local", baseUrl: LOCAL_BASE, apiUrl: LOCAL_API },
+  ],
+};
+
 export const PROJECTS: ProjectDef[] = [
   IMMOSTORY_PROJECT,
+  IMMO_LOCAL_PROJECT,
   ASAFARIM_PORTAL,
   ASAFARIM_EDUMATCH,
   ASAFARIM_VIONTO,
