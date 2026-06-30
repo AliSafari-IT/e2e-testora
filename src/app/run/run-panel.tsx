@@ -36,7 +36,7 @@ import {
 } from "@/components/run-provider";
 import { DomainBrandControl } from "@/components/run/domain-brand-control";
 import { LockedApp } from "@/components/locked-app";
-import { hostFromUrl, setDomainBrand } from "@/lib/domain-logos";
+import { hostFromUrl, setDomainBrand, getDomainBrand, type DomainBrand } from "@/lib/domain-logos";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -387,6 +387,7 @@ export function RunPanel() {
     setSavingTarget(true);
     setTargetError(null);
     const editId = targetForm && targetForm !== "add" ? targetForm.editId : null;
+    const isAdding = targetForm === "add";
     try {
       const res = await fetch(
         editId ? `/api/targets?id=${encodeURIComponent(editId)}` : "/api/targets",
@@ -409,6 +410,23 @@ export function RunPanel() {
       setTargetForm(null);
       const saved = data.target as TargetEnv | undefined;
       if (saved) chooseTarget(saved);
+      // Seed the new target's host with the app's branding if it has none yet.
+      const host = hostFromUrl(targetDraft.baseUrl);
+      if (isAdding && host && activeProject) {
+        const existing = getDomainBrand(host);
+        const hasNoBrand =
+          !existing.productName &&
+          !existing.companyName &&
+          !existing.productLogo &&
+          !existing.companyLogo;
+        if (hasNoBrand) {
+          const productName = activeProject.productName?.trim() || undefined;
+          const companyName = activeProject.companyName?.trim() || undefined;
+          if (productName || companyName) {
+            setDomainBrand(host, { productName, companyName });
+          }
+        }
+      }
     } catch {
       setTargetError("Could not save target.");
     } finally {
@@ -537,6 +555,15 @@ export function RunPanel() {
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
+
+  // Default product/company branding for the active app. Used to pre-fill the
+  // domain-brand control when a target host has no stored branding yet.
+  const defaultBrand = useMemo<DomainBrand | undefined>(() => {
+    if (!activeProject || activeProject.locked) return undefined;
+    const productName = activeProject.productName?.trim() || undefined;
+    const companyName = activeProject.companyName?.trim() || undefined;
+    return productName || companyName ? { productName, companyName } : undefined;
+  }, [activeProject?.productName, activeProject?.companyName, activeProject?.locked]);
 
   // Switching apps re-points the catalog (handled by refreshCatalog, keyed on
   // projectId) AND re-loads that app's target environments. The reconcile effect
@@ -746,6 +773,7 @@ export function RunPanel() {
           <div className="border-t border-border pt-3">
             <DomainBrandControl
               host={hostFromUrl(environment.baseUrl) ?? "localhost"}
+              defaultBrand={defaultBrand}
               disabled={running}
             />
           </div>

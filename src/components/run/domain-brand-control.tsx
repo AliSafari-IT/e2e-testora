@@ -25,15 +25,26 @@ function brandCaption(brand: DomainBrand): string {
  * localStorage and embedded into exported HTML/PDF reports for runs against
  * that domain.
  */
-export function DomainBrandControl({ host, disabled }: { host: string; disabled?: boolean }) {
+export function DomainBrandControl({
+  host,
+  defaultBrand,
+  disabled,
+}: {
+  host: string;
+  defaultBrand?: DomainBrand;
+  disabled?: boolean;
+}) {
   const [brand, setBrand] = useState<DomainBrand>({});
   const [busy, setBusy] = useState<"product" | "company" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBrand(getDomainBrand(host));
+    const stored = getDomainBrand(host);
+    const empty =
+      !stored.productName && !stored.companyName && !stored.productLogo && !stored.companyLogo;
+    setBrand(empty && defaultBrand ? { ...defaultBrand } : stored);
     setError(null);
-  }, [host]);
+  }, [host, defaultBrand]);
 
   function update(patch: Partial<DomainBrand>) {
     const next = { ...brand, ...patch };
