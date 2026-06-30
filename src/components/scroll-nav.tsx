@@ -60,7 +60,7 @@ export function ScrollNav() {
     <div
       aria-hidden={!scrollable}
       className={cn(
-        "fixed right-3 top-1/2 z-30 -translate-y-1/2 transition-all duration-300 sm:right-5",
+        "fixed bottom-4 right-3 z-30 transition-all duration-300 sm:bottom-6 sm:right-5",
         scrollable ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-6 opacity-0",
       )}
     >

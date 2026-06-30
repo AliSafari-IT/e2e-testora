@@ -35,13 +35,16 @@ export async function GET() {
 }
 
 // A run can be scoped to a single fixture, a whole suite, a whole functional
-// requirement (every fixture beneath it), every requirement at once, or an
-// explicit set of cases (the basis for "rerun failed"). Exactly one shape is given.
+// requirement (every fixture beneath it), every requirement at once, an explicit
+// set of cases (the basis for "rerun failed"), or only UI / heavy fixtures.
+// Exactly one shape is given.
 const requestSchema = z.union([
   z.object({ fixtureId: z.string().min(1) }),
   z.object({ suiteId: z.string().min(1) }),
   z.object({ frId: z.string().min(1) }),
   z.object({ all: z.literal(true) }),
+  z.object({ ui: z.literal(true) }),
+  z.object({ heavy: z.literal(true) }),
   z.object({
     cases: z
       .array(
@@ -155,8 +158,11 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   }
+  const isAllScope = "all" in data;
+  const isUiScope = "ui" in data;
+  const isHeavyScope = "heavy" in data;
   const plan =
-    "all" in data
+    isAllScope || isUiScope || isHeavyScope
       ? await loadAllRunPlan(projectId)
       : "fixtureId" in data
         ? await loadFixtureRunPlan(data.fixtureId)
@@ -210,22 +216,30 @@ export async function POST(request: Request) {
   // Heavy live fixtures (video generation, real network scrapes) are slow and
   // overload the backend, cascading into login timeouts on later fixtures. Skip
   // them in an "All requirements" run unless explicitly opted in — they stay
-  // runnable on their own (or via the include toggle).
-  const isAllScope = "all" in data;
+  // runnable on their own (or via the include toggle). UI and heavy scopes run
+  // *only* those tagged fixtures.
   const includeHeavy = body && typeof body === "object" && body.includeHeavy === true;
   const includeUi = body && typeof body === "object" && body.includeUi === true;
   let skippedHeavy: string[] = [];
   let skippedUiCount = 0;
-  if (isAllScope && !includeHeavy) {
-    skippedHeavy = runnableUnits.filter(isHeavy).map((unit) => unit.fixture.title);
-    runnableUnits = runnableUnits.filter((unit) => !isHeavy(unit));
-  }
-  // Browser UI smokes are slow (Chrome launch + login each) — skip them in an
-  // "All requirements" run by default so it's a fast API-only health check.
-  if (isAllScope && !includeUi) {
-    const before = runnableUnits.length;
-    runnableUnits = runnableUnits.filter((unit) => !isUi(unit));
-    skippedUiCount = before - runnableUnits.length;
+  if (isUiScope) {
+    runnableUnits = runnableUnits.filter(isUi);
+    plan.label = "UI smokes";
+  } else if (isHeavyScope) {
+    runnableUnits = runnableUnits.filter(isHeavy);
+    plan.label = "Heavy live fixtures";
+  } else if (isAllScope) {
+    if (!includeHeavy) {
+      skippedHeavy = runnableUnits.filter(isHeavy).map((unit) => unit.fixture.title);
+      runnableUnits = runnableUnits.filter((unit) => !isHeavy(unit));
+    }
+    // Browser UI smokes are slow (Chrome launch + login each) — skip them in an
+    // "All requirements" run by default so it's a fast API-only health check.
+    if (!includeUi) {
+      const before = runnableUnits.length;
+      runnableUnits = runnableUnits.filter((unit) => !isUi(unit));
+      skippedUiCount = before - runnableUnits.length;
+    }
   }
 
   const runId = randomUUID();

@@ -17,6 +17,7 @@ export async function GET(request: Request) {
       fixtureId: fixture.fixtureId,
       title: fixture.title,
       caseCount: fixture.cases.length,
+      metadata: fixture.metadata,
     })),
   );
 }

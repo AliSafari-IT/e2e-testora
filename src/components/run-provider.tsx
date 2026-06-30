@@ -46,9 +46,9 @@ export interface ReportEntry {
 }
 
 // A run can be scoped to a single fixture, a whole suite, a whole functional
-// requirement (every fixture beneath it runs in turn), or "all" requirements at
-// once. The "all" scope needs no id.
-export type RunScope = "fixture" | "suite" | "requirement" | "all";
+// requirement (every fixture beneath it runs in turn), every requirement at
+// once, or only fixtures tagged as UI smokes or heavy live fixtures.
+export type RunScope = "fixture" | "suite" | "requirement" | "all" | "ui" | "heavy";
 
 export interface RunTarget {
   scope: RunScope;
@@ -555,6 +555,14 @@ export function RunProvider({
           ...(target.includeHeavy ? { includeHeavy: true } : {}),
           ...(target.includeUi ? { includeUi: true } : {}),
         });
+        return;
+      }
+      if (target.scope === "ui") {
+        await beginRun({ ui: true });
+        return;
+      }
+      if (target.scope === "heavy") {
+        await beginRun({ heavy: true });
         return;
       }
       if (!target.id) return;

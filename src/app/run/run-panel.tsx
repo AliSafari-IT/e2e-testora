@@ -44,6 +44,7 @@ interface FixtureSummary {
   fixtureId: string;
   title: string;
   caseCount: number;
+  metadata?: Record<string, unknown>;
 }
 
 interface SuiteSummary {
@@ -66,6 +67,8 @@ const SCOPE_TABS: { scope: RunScope; label: string }[] = [
   { scope: "suite", label: "Test suite" },
   { scope: "requirement", label: "Functional requirement" },
   { scope: "all", label: "All requirements" },
+  { scope: "ui", label: "UI smokes" },
+  { scope: "heavy", label: "Heavy live" },
 ];
 
 // A target environment — which deployment a run is pointed at. Built-in entries
@@ -480,8 +483,11 @@ export function RunPanel() {
         ? "suite"
         : scope === "requirement"
           ? "requirement"
-          : "all requirements";
-  const canRun = scope === "all" ? true : Boolean(selectedId);
+          : scope === "ui"
+            ? "UI smokes"
+            : scope === "heavy"
+              ? "heavy live fixtures"
+              : "all requirements";
   // Totals shown for the "all" scope.
   const allTotals = requirements.reduce(
     (acc, r) => ({
@@ -502,6 +508,14 @@ export function RunPanel() {
       return (
         requirements.find((r) => r.id === selectedRequirementId)?.caseCount ?? 0
       );
+    if (scope === "ui")
+      return fixtures
+        .filter((f) => f.metadata?.ui === true)
+        .reduce((sum, f) => sum + f.caseCount, 0);
+    if (scope === "heavy")
+      return fixtures
+        .filter((f) => f.metadata?.heavy === true)
+        .reduce((sum, f) => sum + f.caseCount, 0);
     return allTotals.cases;
   }, [
     scope,
@@ -513,6 +527,11 @@ export function RunPanel() {
     requirements,
     allTotals.cases,
   ]);
+
+  const canRun =
+    scope === "fixture" || scope === "suite" || scope === "requirement"
+      ? Boolean(selectedId)
+      : totalCases > 0;
 
   const progressTotal = runMeta?.totalRuns ?? totalCases;
 
@@ -919,6 +938,28 @@ export function RunPanel() {
                   Include heavy live fixtures (video generation, live scrapes) — much slower, may
                   overload a local backend.
                 </label>
+              </div>
+            )}
+
+            {scope === "ui" && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-muted-foreground">
+                  Runs only browser/UI smoke fixtures across all requirements — launches Chrome + logs in per fixture.
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {fixtures.filter((f) => f.metadata?.ui === true).length} fixture(s) · {totalCases} case(s).
+                </span>
+              </div>
+            )}
+
+            {scope === "heavy" && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm text-muted-foreground">
+                  Runs only heavy live fixtures (video generation, live scrapes) across all requirements — much slower, may overload a local backend.
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {fixtures.filter((f) => f.metadata?.heavy === true).length} fixture(s) · {totalCases} case(s).
+                </span>
               </div>
             )}
 
