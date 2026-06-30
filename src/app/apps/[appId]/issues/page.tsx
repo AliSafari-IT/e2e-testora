@@ -10,6 +10,7 @@ import { db } from "@/db/client";
 import { issues } from "@/db/schema";
 import { getProjectAccess } from "@/lib/app-access";
 import { LockedApp } from "@/components/locked-app";
+import { GithubStateBadge } from "@/components/issues/github-state-badge";
 
 export default async function AppIssuesPage({ params }: { params: Promise<{ appId: string }> }) {
   const { appId } = await params;
@@ -26,6 +27,7 @@ export default async function AppIssuesPage({ params }: { params: Promise<{ appI
       status: issues.status,
       githubUrl: issues.githubUrl,
       githubNumber: issues.githubNumber,
+      githubState: issues.githubState,
       createdAt: issues.createdAt,
     })
     .from(issues)
@@ -80,6 +82,7 @@ export default async function AppIssuesPage({ params }: { params: Promise<{ appI
                         {r.githubNumber ? `#${r.githubNumber}` : "GitHub"}
                       </span>
                     )}
+                    {r.status === "published" && <GithubStateBadge state={r.githubState} />}
                     <Badge variant={r.status === "published" ? "success" : "outline"}>
                       {r.status}
                     </Badge>

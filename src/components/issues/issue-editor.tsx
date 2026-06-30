@@ -9,6 +9,7 @@ import {
   Github,
   Loader2,
   Pencil,
+  RefreshCw,
   Save,
   Trash2,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { markdownToHtml } from "@/lib/markdown";
 import { saveTextFile } from "@/lib/save-file";
+import { GithubStateBadge } from "@/components/issues/github-state-badge";
 
 export interface IssueData {
   id: string;
@@ -25,6 +27,7 @@ export interface IssueData {
   status: "draft" | "published";
   githubUrl: string | null;
   githubNumber: number | null;
+  githubState: "open" | "closed" | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,8 +48,9 @@ export function IssueEditor({
   const [body, setBody] = useState(issue.body);
   const [status, setStatus] = useState(issue.status);
   const [githubUrl, setGithubUrl] = useState(issue.githubUrl);
+  const [githubState, setGithubState] = useState(issue.githubState);
   const [tab, setTab] = useState<"edit" | "preview">("edit");
-  const [busy, setBusy] = useState<null | "save" | "publish" | "delete">(null);
+  const [busy, setBusy] = useState<null | "save" | "publish" | "delete" | "refresh">(null);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
 
@@ -95,6 +99,7 @@ export function IssueEditor({
       }
       setStatus("published");
       setGithubUrl(data.issue.githubUrl ?? null);
+      setGithubState(data.issue.githubState ?? null);
       router.refresh();
     } finally {
       setBusy(null);
@@ -108,6 +113,24 @@ export function IssueEditor({
       extension: "md",
       description: "Markdown issue",
     });
+  }
+
+  async function refreshGithubState() {
+    setBusy("refresh");
+    setError(null);
+    try {
+      const res = await fetch(`/api/issues/${issue.id}/github-state`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError((data?.error as string) ?? "Could not refresh GitHub state.");
+        return;
+      }
+      setGithubState(data.state ?? null);
+      setSavedNote("State refreshed.");
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function remove() {
@@ -139,6 +162,25 @@ export function IssueEditor({
             <ExternalLink className="h-3.5 w-3.5" />
             {issue.githubNumber ? `#${issue.githubNumber} on GitHub` : "View on GitHub"}
           </a>
+        )}
+        {status === "published" && (
+          <>
+            <GithubStateBadge state={githubState} />
+            <button
+              type="button"
+              onClick={() => void refreshGithubState()}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+              title="Refresh open/closed state from GitHub"
+            >
+              {busy === "refresh" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Refresh
+            </button>
+          </>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
           Updated {new Date(issue.updatedAt).toLocaleString()}

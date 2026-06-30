@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Github, Loader2, Save, ExternalLink, Eye, Pencil, Sparkles } from "lucide-react";
+import { GithubStateBadge } from "@/components/issues/github-state-badge";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +40,7 @@ export function GenerateIssueDialog({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiUsed, setAiUsed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ id: string; githubUrl: string | null } | null>(null);
+  const [saved, setSaved] = useState<{ id: string; githubUrl: string | null; githubState: "open" | "closed" | null } | null>(null);
 
   const previewHtml = useMemo(() => markdownToHtml(body), [body]);
   const issuesHref = `/apps/${row.projectId}/issues`;
@@ -117,7 +118,7 @@ export function GenerateIssueDialog({
     setError(null);
     try {
       const id = await createIssue();
-      if (id) setSaved({ id, githubUrl: null });
+      if (id) setSaved({ id, githubUrl: null, githubState: null });
     } finally {
       setBusy(null);
     }
@@ -135,10 +136,10 @@ export function GenerateIssueDialog({
         // The draft was saved; surface the publish error but still let the user
         // open the saved draft.
         setError((data?.error as string) ?? "Saved as draft, but publishing to GitHub failed.");
-        setSaved({ id, githubUrl: null });
+        setSaved({ id, githubUrl: null, githubState: null });
         return;
       }
-      setSaved({ id, githubUrl: data.issue.githubUrl ?? null });
+      setSaved({ id, githubUrl: data.issue.githubUrl ?? null, githubState: data.issue.githubState ?? null });
     } finally {
       setBusy(null);
     }
@@ -158,8 +159,9 @@ export function GenerateIssueDialog({
 
         {saved ? (
           <div className="flex flex-col gap-4 py-4">
-            <p className="text-sm text-emerald-400">
+            <p className="flex flex-wrap items-center gap-2 text-sm text-emerald-400">
               Issue saved{saved.githubUrl ? " and published to GitHub." : " as a draft."}
+              {saved.githubUrl && <GithubStateBadge state={saved.githubState} />}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button asChild>

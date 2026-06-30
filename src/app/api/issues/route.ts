@@ -20,6 +20,7 @@ export async function GET(request: Request) {
       status: issues.status,
       githubUrl: issues.githubUrl,
       githubNumber: issues.githubNumber,
+      githubState: issues.githubState,
       createdAt: issues.createdAt,
       updatedAt: issues.updatedAt,
     })

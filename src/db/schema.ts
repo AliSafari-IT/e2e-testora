@@ -23,6 +23,8 @@ export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "pr
 
 export const issueStatusEnum = pgEnum("issue_status", ["draft", "published"]);
 
+export const githubIssueStateEnum = pgEnum("github_issue_state", ["open", "closed"]);
+
 // The app registry. Apps used to be code-only (src/data/projects.ts); they now
 // live here so new apps can be added from the UI and marked private. A private
 // app is locked behind a key (keyHash) — its catalog and results are withheld
@@ -68,6 +70,7 @@ export const issues = pgTable("issues", {
   // Set once published to GitHub.
   githubUrl: text("github_url"),
   githubNumber: integer("github_number"),
+  githubState: githubIssueStateEnum("github_state"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

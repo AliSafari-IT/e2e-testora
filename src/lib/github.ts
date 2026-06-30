@@ -69,6 +69,33 @@ export interface CreatedIssue {
   number: number;
 }
 
+export type GithubIssueState = "open" | "closed";
+
+/**
+ * Fetch the current state of a GitHub issue. Returns null if the request fails
+ * so the UI can fall back to the last known state.
+ */
+export async function getGithubIssueState(params: {
+  owner: string;
+  name: string;
+  token: string;
+  number: number;
+}): Promise<GithubIssueState | null> {
+  const { owner, name, token, number } = params;
+  const res = await fetch(`https://api.github.com/repos/${owner}/${name}/issues/${number}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "e2e-testora",
+    },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { state?: unknown };
+  if (data.state === "open" || data.state === "closed") return data.state;
+  return null;
+}
+
 /**
  * File an issue on GitHub. Throws an Error with a human-readable message on the
  * common failures (bad token, missing repo/scope, validation, rate limit) so the

@@ -32,6 +32,7 @@ export default async function IssueDetailPage({
     status: issue.status,
     githubUrl: issue.githubUrl,
     githubNumber: issue.githubNumber,
+    githubState: issue.githubState,
     createdAt: issue.createdAt.toISOString(),
     updatedAt: issue.updatedAt.toISOString(),
   };

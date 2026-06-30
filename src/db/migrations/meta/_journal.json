@@ -57,6 +57,13 @@
       "when": 1782663582326,
       "tag": "0007_funny_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782848579378,
+      "tag": "0008_dark_gunslinger",
+      "breakpoints": true
     }
   ]
 }
